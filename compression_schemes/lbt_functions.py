@@ -1,3 +1,14 @@
+%matplotlib widget
+import warnings
+import inspect
+import matplotlib.pyplot as plt
+import IPython.display
+import numpy as np
+from cued_sf2_lab.familiarisation import load_mat_img, plot_image
+from cued_sf2_lab.laplacian_pyramid import quantise
+from cued_sf2_lab.dct import colxfm
+from cued_sf2_lab.lbt import pot_ii, dct_ii
+
 #LBT method
 def lbt_optimal_step(X,
                      s: float,
