@@ -1,0 +1,3 @@
+Finding an error measure which is more directly connected to visual appearance than
+the rms error - SSIM
+
