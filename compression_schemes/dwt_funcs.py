@@ -87,7 +87,7 @@ def optimisation_for_DWT(X, Y, n, max_iter: int = 100):
     Output: opt step_size, opt Yq, opt dwent, opt Z
     """
     ls, hs = 1.0, 50.0           # lower / upper bounds
-    step_size   = 0.5 * (ls + hs)
+    step_size   = hs
     target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
     dwstep = np.full((3, n+1), hs)
