@@ -52,7 +52,9 @@ def dctbpp(Yr, N):
 
 def optimisation_for_DCT(X, Y, C, max_iter: int = 100):
     """
-    
+    Returns the equal rms optimal step.
+    Input: X, Y, C
+    Output: optimal step, Yq, Z
     """
     ls, hs = 0.0, 50.0           # lower / upper bounds
     step_size   = hs
@@ -83,3 +85,11 @@ def optimisation_for_DCT(X, Y, C, max_iter: int = 100):
     Z = colxfm(colxfm(Yq.T, C.T).T, C.T)
 
     return step_size, Yq, Z
+
+def compression_ratio_for_DCT(N, X, Yq):
+    Xq = quantise(X, 17)
+    Yr = regroup(Yq, N)/N
+    no_bits_sub_img = dctbpp(Yr, N)
+    no_bits_ref = bpp(Xq)*Xq.size
+    compression_ratio = no_bits_ref/no_bits_sub_img
+    return compression_ratio
