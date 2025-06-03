@@ -116,7 +116,7 @@ def optimisation_for_DWT(X, Y, n, max_iter: int = 100):
     Z = nlevidwt(Yq, n)
     return step_size, Yq, dwtent, Z
 
-def compression_ratio(X, Yq, dwtent):
+def compression_ratio_for_DWT(X, Yq, dwtent):
     """
     This function computes the compression ratio for a given dwt scheme
     Input: X, Yq, dwtent
