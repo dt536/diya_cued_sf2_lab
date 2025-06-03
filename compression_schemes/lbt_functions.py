@@ -104,3 +104,72 @@ def lbt_optimal_step(X,
 
     # If we drop out because of max_iter, return the best we have
     return rms_err_Zp, Zp, mid, e   #mid is the matched step size, e is the error
+
+
+
+
+def lbt_reconstruct(X, N, s, step):
+    """
+    Apply a POT+block-DCT analysis/synthesis to image X and return Zp.
+
+    Parameters
+    ----------
+    X    : 2-D ndarray
+           Spatial image (zero-mean if you previously subtracted 128).
+    N    : int
+           Block size of the DCT (default 8).
+    s    : float
+           Overlap (scale) parameter for the POT (default 1.4).
+    step : float or None
+           If given, quantise the DCT coefficients with this step
+           before the inverse transform.  If None, no quantisation.
+
+    Returns
+    -------
+    Zp : 2-D ndarray
+         Reconstructed image after inverse DCT and post-filter.
+
+    rms_err_Zp: rms between Zp and X
+    """
+    # ----- 1.  matrices -------------------------------------------------
+    Pf, Pr = pot_ii(N, s)         # forward & reverse POT filters
+    C      = dct_ii(N)            # orthonormal block DCT
+
+    # slice that selects interior rows/cols (overlapped region)
+    t = np.s_[N//2 : -N//2]
+
+    # ----- 2.  forward POT ---------------------------------------------
+    Xp = X.copy()
+    Xp[t, :] = colxfm(Xp[t, :],  Pf)       # columns
+    Xp[:, t] = colxfm(Xp[:, t].T, Pf).T    # rows
+
+    # ----- 3.  block DCT ------------------------------------------------
+    Y = colxfm(colxfm(Xp.T, C).T, C)
+
+    # optional quantisation
+    
+    Y = quantise(Y, step)
+
+    # ----- 4.  inverse DCT ---------------------------------------------
+    Z = colxfm(colxfm(Y.T, C.T).T, C.T)
+
+    # ----- 5.  post-filter ---------------------------------------------
+    Zp = Z.copy()
+    Zp[:, t] = colxfm(Zp[:, t].T, Pr.T).T  # rows
+    Zp[t, :] = colxfm(Zp[t, :],  Pr.T)     # columns
+
+
+    rms_err_Zp = np.std(X- Zp)
+
+    return Zp, rms_err_Zp
+
+
+
+
+def rms_LBT(X, step:float, s:float,N: int) -> float:
+    """Return RMS error for an N×N LBT with overlap-parameter *s*
+       when the DCT coefficients are quantised with step Δ=*step*."""
+    
+    Zp = lbt_reconstruct(X, N, s, step)
+    rms_err_Zp = np.std(X- Zp)
+    return rms_err_Zp
