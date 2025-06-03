@@ -102,6 +102,7 @@ def find_step_LBT(X,
     return mid, e   #mid is the matched step size, e is the error
 
 
+
 def CPR_LBT(X, N, s, rms_ref, step_ref):
     "Returns the compression ratio at optimal step size "
 
@@ -118,9 +119,6 @@ def CPR_LBT(X, N, s, rms_ref, step_ref):
 
     rms_ref: rms value between X and Xq quantised at step_ref
     step_ref :quantise X at this step size
-
-
-    
           '''
 
     C  = dct_ii(N)
