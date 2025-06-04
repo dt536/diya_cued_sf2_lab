@@ -90,29 +90,29 @@ def optimisation_for_DWT(X, Y, n, max_iter: int = 100):
     step_size   = hs
     target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
-    dwstep = np.full((3, n+1), hs)
-    Yq, _ = quantdwt(Y, dwstep)
+    dwtstep = np.full((3, n+1), hs)
+    Yq, _ = quantdwt(Y, dwtstep)
     Z = nlevidwt(Yq, n)
     rms_error = np.std(X-Z)
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq, _ = quantdwt(Y, dwstep)
+        Yq, _ = quantdwt(Y, dwtstep)
         Z = nlevidwt(Yq, n)
         rms_error = np.std(X-Z)
 
         if rms_error > target_rms:
             hs = step_size
             step_size = 0.5 * (ls + step_size)
-            dwstep = np.full((3, n+1), step_size)
+            dwtstep = np.full((3, n+1), step_size)
         else:                       # rms_error < target_rms
             ls = step_size
             step_size = 0.5 * (hs + step_size)
-            dwstep = np.full((3, n+1), step_size)
+            dwtstep = np.full((3, n+1), step_size)
         iter_count += 1
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq, dwtent = quantdwt(Y, dwstep)
+    Yq, dwtent = quantdwt(Y, dwtstep)
     Z = nlevidwt(Yq, n)
     return step_size, Yq, dwtent, Z
 
@@ -202,35 +202,35 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, max_iter: int = 100):
     step_size   = 0.5 * (ls + hs)
     target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
-    dwstep = step_ratios*hs
-    Yq, _ = quantdwt(Y, dwstep)
+    dwtstep = step_ratios*hs
+    Yq, _ = quantdwt(Y, dwtstep)
     Z = nlevidwt(Yq, n)
     rms_error = np.std(X-Z)
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq, _ = quantdwt(Y, dwstep)
+        Yq, _ = quantdwt(Y, dwtstep)
         Z = nlevidwt(Yq, n)
         rms_error = np.std(X-Z)
 
         if rms_error > target_rms:
             hs = step_size
             step_size = 0.5 * (ls + step_size)
-            dwstep = step_ratios*step_size
+            dwtstep = step_ratios*step_size
         else:                       # rms_error < target_rms
             ls = step_size
             step_size = 0.5 * (hs + step_size)
-            dwstep = step_ratios*step_size
+            dwtstep = step_ratios*step_size
         iter_count += 1
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq, dwtent = quantdwt(Y, dwstep)
+    Yq, dwtent = quantdwt(Y, dwtstep)
     Z = nlevidwt(Yq, n)
-    return step_size, dwstep, Yq, dwtent, Z
+    return step_size, dwtstep, Yq, dwtent, Z
 
 def diff_step_sizes(X, m, n):
     """
-    This function scales dwstep appropriately for an equal mse and equal rms scheme
+    This function scales dwtstep appropriately for an equal mse and equal rms scheme
     Input: X, m (eg 256), n
     Output:scaled
     """
@@ -241,4 +241,92 @@ def diff_step_sizes(X, m, n):
     print(step_ratios)
     _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios)
     return(scaled, Yq, dwtent, Z)
+    
+
+def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
+    '''
+    Regroups the rows and columns of ``X``, such that an
+    n-level DWT image composed of separate subimages is regrouped into 2^n x
+    2^n blocks of coefs from the same spatial region (like the DCT).
+
+    If n is negative the process is reversed.
+    '''
+    Y = X.copy()
+
+    if n == 0:
+        return Y
+    elif n < 0:
+        n = -n
+        invert = 1
+    else:
+        invert = 0
+
+    sx = X.shape
+    N = np.round(2**n)
+
+    if sx[0] % N != 0 or sx[1] % N != 0:
+        raise ValueError(
+            'Error in dwtgroup: X dimensions are not multiples of 2^n')
+
+    if invert == 0:
+        # Determine size of smallest sub-image.
+        sx = sx // N
+
+        # Regroup the 4 subimages at each level, starting with the smallest
+        # subimages in the top left corner of Y.
+        k = 1  # Size of blocks of pels at each level.
+        # tm = 1:sx[0];
+        # tn = 1:sx[1];
+        tm = np.arange(sx[0])
+        tn = np.arange(sx[1])
+
+        # Loop for each level.
+        for _ in range(n):
+            tm2 = np.block([
+                [np.reshape(tm, (k, sx[0]//k), order='F')],
+                [np.reshape(tm+sx[0], (k, sx[0]//k), order='F')]
+            ])
+            tn2 = np.block([
+                [np.reshape(tn, (k, sx[1]//k), order='F')],
+                [np.reshape(tn+sx[1], (k, sx[1]//k), order='F')]
+            ])
+
+            sx = sx * 2
+            k = k * 2
+            tm = np.arange(sx[0])
+            tn = np.arange(sx[1])
+            Y[np.ix_(tm, tn)] = Y[np.ix_(
+                tm2.flatten('F'), tn2.flatten('F'))]
+
+    else:
+        # Invert the grouping:
+        # Determine size of largest sub-image.
+        sx = np.array(X.shape) // 2
+
+        # Regroup the 4 subimages at each level, starting with the largest
+        # subimages in Y.
+        k = N // 2  # Size of blocks of pels at each level.
+
+        # Loop for each level.
+        for _ in np.arange(n):
+            tm = np.arange(sx[0])
+            tn = np.arange(sx[1])
+            tm2 = np.block([
+                [np.reshape(tm, (k, sx[0]//k), order='F')],
+                [np.reshape(tm+sx[0], (k, sx[0]//k), order='F')]
+            ])
+            tn2 = np.block([
+                [np.reshape(tn, (k, sx[1]//k), order='F')],
+                [np.reshape(tn+sx[1], (k, sx[1]//k), order='F')]
+            ])
+
+            Y[np.ix_(tm2.flatten('F'), tn2.flatten('F'))] = Y[np.ix_(
+                np.arange(sx[0]*2), np.arange(sx[1]*2))]
+
+            sx = sx // 2
+            k = k // 2
+
+    return Y
+
+
     

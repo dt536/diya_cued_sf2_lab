@@ -4,3 +4,5 @@ the rms error - SSIM
 frequency-dependent quantisation for DWT
 
 Improve DC coding of dc coefficient
+
+a better scanning strategy before huffman coding.
