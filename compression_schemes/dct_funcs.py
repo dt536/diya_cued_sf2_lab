@@ -50,7 +50,7 @@ def dctbpp(Yr, N):
     return(no_bits)
 
 
-def optimisation_for_DCT(X, Y, C, max_iter: int = 100):
+def optimisation_for_DCT(X, Y, C, k, max_iter: int = 100):
     """
     Returns the equal rms optimal step.
     Input: X, Y, C
@@ -60,13 +60,13 @@ def optimisation_for_DCT(X, Y, C, max_iter: int = 100):
     step_size   = hs
     target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
-    Yq = quantise(Y, step_size)
+    Yq = quantise(Y, step_size, rise1=k*step_size)
     Z = colxfm(colxfm(Yq.T, C.T).T, C.T)
     rms_error   = np.std(X-Z)
 
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq = quantise(Y, step_size)
+        Yq = quantise(Y, step_size, rise1=k*step_size)
         Z = colxfm(colxfm(Yq.T, C.T).T, C.T)
         rms_error = np.std(X-Z)
 
@@ -81,13 +81,13 @@ def optimisation_for_DCT(X, Y, C, max_iter: int = 100):
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq = quantise(Y, step_size)
+    Yq = quantise(Y, step_size, rise1=k*step_size)
     Z = colxfm(colxfm(Yq.T, C.T).T, C.T)
 
     return step_size, Yq, Z
 
-def compression_ratio_for_DCT(N, X, Yq):
-    Xq = quantise(X, 17)
+def compression_ratio_for_DCT(N, X, Yq, k):
+    Xq = quantise(X, 17, rise1 = k*17)
     Yr = regroup(Yq, N)/N
     no_bits_sub_img = dctbpp(Yr, N)
     no_bits_ref = bpp(Xq)*Xq.size
