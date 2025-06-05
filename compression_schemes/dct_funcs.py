@@ -86,8 +86,8 @@ def optimisation_for_DCT(X, Y, C, k, max_iter: int = 100):
 
     return step_size, Yq, Z
 
-def compression_ratio_for_DCT(N, X, Yq, k):
-    Xq = quantise(X, 17, rise1 = k*17)
+def compression_ratio_for_DCT(N, X, Yq):
+    Xq = quantise(X, 17)
     Yr = regroup(Yq, N)/N
     no_bits_sub_img = dctbpp(Yr, N)
     no_bits_ref = bpp(Xq)*Xq.size
