@@ -40,11 +40,12 @@ def nlevidwt(Yq, n):
     return Xr
 
 
-def quantdwt(Y: np.ndarray, dwtstep: np.ndarray):
+def quantdwt(Y: np.ndarray, dwtstep: np.ndarray, k=0.5):
     """
     Parameters:
         Y: the output of `dwt(X, n)`
         dwtstep: an array of shape `(3, n+1)`
+        k: the scaling factor for rise1
     Returns:
         Yq: the quantized version of `Y`
         dwtenc: an array of shape `(3, n+1)` containing the entropies
@@ -58,29 +59,29 @@ def quantdwt(Y: np.ndarray, dwtstep: np.ndarray):
         m = m//2
         #top right 
         VU = Yq[:m, m:2*m]
-        VU = quantise(VU, dwtstep[0, col])
+        VU = quantise(VU, dwtstep[0, col], k*dwtstep[0, col])
         Yq[:m, m:2*m] = VU
         dwtent[0, col] = bpp(VU)
 
         #bottom left
         UV = Yq[m:2*m, :m]
-        UV = quantise(UV, dwtstep[1, col])
+        UV = quantise(UV, dwtstep[1, col], k*dwtstep[1, col])
         Yq[m:2*m, :m] = UV
         dwtent[1, col] = bpp(UV)
 
         #bottom right
         VV = Yq[m:2*m, m:2*m]
-        VV = quantise(VV, dwtstep[2, col])
+        VV = quantise(VV, dwtstep[2, col], k*dwtstep[2, col])
         Yq[m:2*m, m:2*m] = VV
         dwtent[2, col] = bpp(VV)
     #top left
     UU = Yq[:m, :m]
-    UU = quantise(UU, dwtstep[0, n])
+    UU = quantise(UU, dwtstep[0, n], k*dwtstep[0, n])
     Yq[:m, :m] = UU
     dwtent[0, -1] = bpp(UU)
     return Yq, dwtent
 
-def optimisation_for_DWT(X, Y, n, target_rms, max_iter: int = 100):
+def optimisation_for_DWT(X, Y, n, target_rms, k=0.5, max_iter: int = 100):
     """
     This function computes the equal rms optimum step size for quantisation
     Input: X, Y, n
@@ -90,12 +91,12 @@ def optimisation_for_DWT(X, Y, n, target_rms, max_iter: int = 100):
     step_size   = hs
     tol         = 0.001
     dwtstep = np.full((3, n+1), hs)
-    Yq, _ = quantdwt(Y, dwtstep)
+    Yq, _ = quantdwt(Y, dwtstep, k)
     Z = nlevidwt(Yq, n)
     rms_error = np.std(X-Z)
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq, _ = quantdwt(Y, dwtstep)
+        Yq, _ = quantdwt(Y, dwtstep, k)
         Z = nlevidwt(Yq, n)
         rms_error = np.std(X-Z)
 
@@ -111,7 +112,7 @@ def optimisation_for_DWT(X, Y, n, target_rms, max_iter: int = 100):
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq, dwtent = quantdwt(Y, dwtstep)
+    Yq, dwtent = quantdwt(Y, dwtstep, k)
     Z = nlevidwt(Yq, n)
     return step_size, Yq, dwtent, Z
 
@@ -191,7 +192,7 @@ def energy_from_impulse(N, n, amplitude=100.0):
     return energies
 
 
-def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, max_iter: int = 100):
+def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, k=0.5, max_iter: int = 100):
     """
     This function computes the equal mse optimum step size for quantisation
     Input: X, Y, n
@@ -201,12 +202,12 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, max_iter: int = 1
     step_size   = 0.5 * (ls + hs)
     tol         = 0.001
     dwtstep = step_ratios*hs
-    Yq, _ = quantdwt(Y, dwtstep)
+    Yq, _ = quantdwt(Y, dwtstep, k)
     Z = nlevidwt(Yq, n)
     rms_error = np.std(X-Z)
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq, _ = quantdwt(Y, dwtstep)
+        Yq, _ = quantdwt(Y, dwtstep, k)
         Z = nlevidwt(Yq, n)
         rms_error = np.std(X-Z)
 
@@ -222,11 +223,11 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, max_iter: int = 1
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq, dwtent = quantdwt(Y, dwtstep)
+    Yq, dwtent = quantdwt(Y, dwtstep, k)
     Z = nlevidwt(Yq, n)
     return step_size, dwtstep, Yq, dwtent, Z
 
-def diff_step_sizes(X, m, n, target_rms):
+def diff_step_sizes(X, m, n, target_rms, k=0.5):
     """
     This function scales dwtstep appropriately for an equal mse and equal rms scheme
     Input: X, m (eg 256), n
@@ -237,7 +238,7 @@ def diff_step_sizes(X, m, n, target_rms):
     step_ratios = 1 / np.sqrt(energies)
     step_ratios /= step_ratios[0][0]
     print(step_ratios)
-    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms)
+    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, k)
     return(scaled, Yq, dwtent, Z)
     
 
@@ -327,4 +328,3 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-    
