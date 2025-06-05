@@ -80,7 +80,7 @@ def quantdwt(Y: np.ndarray, dwtstep: np.ndarray):
     dwtent[0, -1] = bpp(UU)
     return Yq, dwtent
 
-def optimisation_for_DWT(X, Y, n, max_iter: int = 100):
+def optimisation_for_DWT(X, Y, n, target_rms, max_iter: int = 100):
     """
     This function computes the equal rms optimum step size for quantisation
     Input: X, Y, n
@@ -88,7 +88,6 @@ def optimisation_for_DWT(X, Y, n, max_iter: int = 100):
     """
     ls, hs = 1.0, 50.0           # lower / upper bounds
     step_size   = hs
-    target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
     dwtstep = np.full((3, n+1), hs)
     Yq, _ = quantdwt(Y, dwtstep)
@@ -192,7 +191,7 @@ def energy_from_impulse(N, n, amplitude=100.0):
     return energies
 
 
-def optimisation_for_DWT_MSE(X, Y, n, step_ratios, max_iter: int = 100):
+def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, max_iter: int = 100):
     """
     This function computes the equal mse optimum step size for quantisation
     Input: X, Y, n
@@ -200,7 +199,6 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, max_iter: int = 100):
     """
     ls, hs = 1.0, 50.0           # lower / upper bounds
     step_size   = 0.5 * (ls + hs)
-    target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
     dwtstep = step_ratios*hs
     Yq, _ = quantdwt(Y, dwtstep)
@@ -228,7 +226,7 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, max_iter: int = 100):
     Z = nlevidwt(Yq, n)
     return step_size, dwtstep, Yq, dwtent, Z
 
-def diff_step_sizes(X, m, n):
+def diff_step_sizes(X, m, n, target_rms):
     """
     This function scales dwtstep appropriately for an equal mse and equal rms scheme
     Input: X, m (eg 256), n
@@ -239,7 +237,7 @@ def diff_step_sizes(X, m, n):
     step_ratios = 1 / np.sqrt(energies)
     step_ratios /= step_ratios[0][0]
     print(step_ratios)
-    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios)
+    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms)
     return(scaled, Yq, dwtent, Z)
     
 
