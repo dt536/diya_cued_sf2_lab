@@ -489,7 +489,7 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-def jpegenc_dwt(X: np.ndarray, n, target_rms, 
+def jpegenc_dwt(X: np.ndarray, n, target_rms, k, 
         opthuff: bool = False, dcbits: int = 8, log: bool = True
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
@@ -521,7 +521,7 @@ def jpegenc_dwt(X: np.ndarray, n, target_rms,
     # DWT on input image X and quantise.
     if log:
         print('Forward {} DWT'.format(n))
-    _, Yq, _, _ = diff_step_sizes(X, 256, n, target_rms)
+    _, Yq, _, _ = diff_step_sizes(X, 256, n, target_rms, k)
 
     # Regrouping 
     if log:
