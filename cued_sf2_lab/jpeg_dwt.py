@@ -8,8 +8,8 @@ import numpy as np
 from .laplacian_pyramid import quant1, quant2
 from .dct import dct_ii, colxfm, regroup
 from .bitword import bitword
-from compression_schemes.dwt_funcs import *
-import matplotlib.pyplot as plt
+import numpy as np
+from compression_schemes.dwt_funcs import*
 
 __all__ = [
     "diagscan",
@@ -489,7 +489,7 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-def jpegenc_dwt(X: np.ndarray, n, target_rms, k, 
+def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio, 
         opthuff: bool = False, dcbits: int = 8, log: bool = True
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
@@ -521,8 +521,8 @@ def jpegenc_dwt(X: np.ndarray, n, target_rms, k,
     # DWT on input image X and quantise.
     if log:
         print('Forward {} DWT'.format(n))
-    _, Yq, _, _ = diff_step_sizes(X, 256, n, target_rms, k)
-
+    Y = nlevdwt(X, n)
+    Yq = quant1dwt(Y, steps, rise_ratio)
     # Regrouping 
     if log:
         print('Regrouping into {} x {} blocks'.format(2**n, 2**n))
@@ -609,7 +609,7 @@ def jpegenc_dwt(X: np.ndarray, n, target_rms, k,
     return vlc, dhufftab, totalbits
 
 
-def jpegdec_dwt(vlc: np.ndarray, n,
+def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio, 
         hufftab: Optional[HuffmanTable] = None,
         dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
         ) -> np.ndarray:
@@ -728,7 +728,8 @@ def jpegdec_dwt(vlc: np.ndarray, n,
             Zq[r:r+M, c:c+M] = yq
 
     Z_reg = dwtgroup(Zq, -n)
-    Z = nlevidwt(Z_reg, n)
+    Zq = quant2dwt(Z_reg, steps, rise_ratio)
+    Z = nlevidwt(Zq, n)
 
     return Z
 

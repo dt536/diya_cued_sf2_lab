@@ -1,8 +1,7 @@
 from cued_sf2_lab.dwt import idwt
 from cued_sf2_lab.dwt import dwt
-from cued_sf2_lab.laplacian_pyramid import quantise, bpp
+from cued_sf2_lab.laplacian_pyramid import quantise, quant1, quant2, bpp
 import numpy as np
-import matplotlib.pyplot as plt
 
 def zero_mean(X):
     return (X - 128.0)
@@ -40,12 +39,12 @@ def nlevidwt(Yq, n):
     return Xr
 
 
-def quantdwt(Y: np.ndarray, dwtstep: np.ndarray, k=0.5):
+def quantdwt(Y: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5):
     """
     Parameters:
         Y: the output of `dwt(X, n)`
         dwtstep: an array of shape `(3, n+1)`
-        k: the scaling factor for rise1
+        rise_ratio: the scaling factor for rise1
     Returns:
         Yq: the quantized version of `Y`
         dwtenc: an array of shape `(3, n+1)` containing the entropies
@@ -59,29 +58,29 @@ def quantdwt(Y: np.ndarray, dwtstep: np.ndarray, k=0.5):
         m = m//2
         #top right 
         VU = Yq[:m, m:2*m]
-        VU = quantise(VU, dwtstep[0, col], k*dwtstep[0, col])
+        VU = quantise(VU, dwtstep[0, col], rise_ratio*dwtstep[0, col])
         Yq[:m, m:2*m] = VU
         dwtent[0, col] = bpp(VU)
 
         #bottom left
         UV = Yq[m:2*m, :m]
-        UV = quantise(UV, dwtstep[1, col], k*dwtstep[1, col])
+        UV = quantise(UV, dwtstep[1, col], rise_ratio*dwtstep[1, col])
         Yq[m:2*m, :m] = UV
         dwtent[1, col] = bpp(UV)
 
         #bottom right
         VV = Yq[m:2*m, m:2*m]
-        VV = quantise(VV, dwtstep[2, col], k*dwtstep[2, col])
+        VV = quantise(VV, dwtstep[2, col], rise_ratio*dwtstep[2, col])
         Yq[m:2*m, m:2*m] = VV
         dwtent[2, col] = bpp(VV)
     #top left
     UU = Yq[:m, :m]
-    UU = quantise(UU, dwtstep[0, n], k*dwtstep[0, n])
+    UU = quantise(UU, dwtstep[0, n], rise_ratio*dwtstep[0, n])
     Yq[:m, :m] = UU
     dwtent[0, -1] = bpp(UU)
     return Yq, dwtent
 
-def optimisation_for_DWT(X, Y, n, target_rms, k=0.5, max_iter: int = 100):
+def optimisation_for_DWT(X, Y, n, target_rms, rise_ratio=0.5, max_iter: int = 100):
     """
     This function computes the equal rms optimum step size for quantisation
     Input: X, Y, n
@@ -91,12 +90,12 @@ def optimisation_for_DWT(X, Y, n, target_rms, k=0.5, max_iter: int = 100):
     step_size   = hs
     tol         = 0.001
     dwtstep = np.full((3, n+1), hs)
-    Yq, _ = quantdwt(Y, dwtstep, k)
+    Yq, _ = quantdwt(Y, dwtstep, rise_ratio)
     Z = nlevidwt(Yq, n)
     rms_error = np.std(X-Z)
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq, _ = quantdwt(Y, dwtstep, k)
+        Yq, _ = quantdwt(Y, dwtstep, rise_ratio)
         Z = nlevidwt(Yq, n)
         rms_error = np.std(X-Z)
 
@@ -112,7 +111,7 @@ def optimisation_for_DWT(X, Y, n, target_rms, k=0.5, max_iter: int = 100):
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq, dwtent = quantdwt(Y, dwtstep, k)
+    Yq, dwtent = quantdwt(Y, dwtstep, rise_ratio)
     Z = nlevidwt(Yq, n)
     return step_size, Yq, dwtent, Z
 
@@ -192,7 +191,7 @@ def energy_from_impulse(N, n, amplitude=100.0):
     return energies
 
 
-def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, k=0.5, max_iter: int = 100):
+def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio=0.5, max_iter: int = 100):
     """
     This function computes the equal mse optimum step size for quantisation
     Input: X, Y, n
@@ -202,12 +201,12 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, k=0.5, max_iter: 
     step_size   = 0.5 * (ls + hs)
     tol         = 0.001
     dwtstep = step_ratios*hs
-    Yq, _ = quantdwt(Y, dwtstep, k)
+    Yq, _ = quantdwt(Y, dwtstep, rise_ratio)
     Z = nlevidwt(Yq, n)
     rms_error = np.std(X-Z)
     iter_count = 0
     while np.abs(rms_error - target_rms) > tol and iter_count < max_iter:
-        Yq, _ = quantdwt(Y, dwtstep, k)
+        Yq, _ = quantdwt(Y, dwtstep, rise_ratio)
         Z = nlevidwt(Yq, n)
         rms_error = np.std(X-Z)
 
@@ -223,11 +222,11 @@ def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, k=0.5, max_iter: 
 
     if iter_count == max_iter:
         print("Warning: max iterations reached without meeting tolerance")
-    Yq, dwtent = quantdwt(Y, dwtstep, k)
+    Yq, dwtent = quantdwt(Y, dwtstep, rise_ratio)
     Z = nlevidwt(Yq, n)
     return step_size, dwtstep, Yq, dwtent, Z
 
-def diff_step_sizes(X, m, n, target_rms, k=0.5):
+def diff_step_sizes(X, m, n, target_rms, rise_ratio=0.5):
     """
     This function scales dwtstep appropriately for an equal mse and equal rms scheme
     Input: X, m (eg 256), n
@@ -238,93 +237,87 @@ def diff_step_sizes(X, m, n, target_rms, k=0.5):
     step_ratios = 1 / np.sqrt(energies)
     step_ratios /= step_ratios[0][0]
     print(step_ratios)
-    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, k)
+    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio)
     return(scaled, Yq, dwtent, Z)
     
+def quant1dwt(Y: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5):
+    """
+    Parameters:
+        Y: the output of `dwt(X, n)`
+        dwtstep: an array of shape `(3, n+1)`
+        rise_ratio: the scaling factor for rise1
+    Returns:
+        Yq: the quantized version of `Y`
+        dwtenc: an array of shape `(3, n+1)` containing the entropies
+    """
+    # your code here
+    Yq = Y.copy()
+    m = Y.shape[0]
+    n = dwtstep.shape[1]-1
+    dwtent = np.zeros((dwtstep.shape[0], dwtstep.shape[1]))
+    for col in range(n):
+        m = m//2
+        #top right 
+        VU = Yq[:m, m:2*m]
+        VU = quant1(VU, dwtstep[0, col], rise_ratio*dwtstep[0, col])
+        Yq[:m, m:2*m] = VU
+        dwtent[0, col] = bpp(VU)
 
-def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
-    '''
-    Regroups the rows and columns of ``X``, such that an
-    n-level DWT image composed of separate subimages is regrouped into 2^n x
-    2^n blocks of coefs from the same spatial region (like the DCT).
+        #bottom left
+        UV = Yq[m:2*m, :m]
+        UV = quant1(UV, dwtstep[1, col], rise_ratio*dwtstep[1, col])
+        Yq[m:2*m, :m] = UV
+        dwtent[1, col] = bpp(UV)
 
-    If n is negative the process is reversed.
-    '''
-    Y = X.copy()
+        #bottom right
+        VV = Yq[m:2*m, m:2*m]
+        VV = quant1(VV, dwtstep[2, col], rise_ratio*dwtstep[2, col])
+        Yq[m:2*m, m:2*m] = VV
+        dwtent[2, col] = bpp(VV)
+    #top left
+    UU = Yq[:m, :m]
+    UU = quant1(UU, dwtstep[0, n], rise_ratio*dwtstep[0, n])
+    Yq[:m, :m] = UU
+    dwtent[0, -1] = bpp(UU)
+    return Yq
 
-    if n == 0:
-        return Y
-    elif n < 0:
-        n = -n
-        invert = 1
-    else:
-        invert = 0
+def quant2dwt(Yq: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5) -> np.ndarray:
+    """
+    Inverse quantisation of DWT coefficients using quant2.
 
-    sx = X.shape
-    N = np.round(2**n)
+    Parameters:
+        Yq: the quantised DWT coefficients
+        dwtstep: step sizes of shape (3, n+1)
+        rise_ratio: the same scaling factor used during quantisation
 
-    if sx[0] % N != 0 or sx[1] % N != 0:
-        raise ValueError(
-            'Error in dwtgroup: X dimensions are not multiples of 2^n')
+    Returns:
+        Y: the reconstructed (dequantised) DWT coefficients
+    """
+    Y = Yq.copy()
+    m = Y.shape[0]
+    n = dwtstep.shape[1] - 1
 
-    if invert == 0:
-        # Determine size of smallest sub-image.
-        sx = sx // N
+    for col in range(n):
+        m = m // 2
 
-        # Regroup the 4 subimages at each level, starting with the smallest
-        # subimages in the top left corner of Y.
-        k = 1  # Size of blocks of pels at each level.
-        # tm = 1:sx[0];
-        # tn = 1:sx[1];
-        tm = np.arange(sx[0])
-        tn = np.arange(sx[1])
+        # top right (VU)
+        VU = Y[:m, m:2*m]
+        VU = quant2(VU, dwtstep[0, col], rise_ratio*dwtstep[0, col])
+        Y[:m, m:2*m] = VU
 
-        # Loop for each level.
-        for _ in range(n):
-            tm2 = np.block([
-                [np.reshape(tm, (k, sx[0]//k), order='F')],
-                [np.reshape(tm+sx[0], (k, sx[0]//k), order='F')]
-            ])
-            tn2 = np.block([
-                [np.reshape(tn, (k, sx[1]//k), order='F')],
-                [np.reshape(tn+sx[1], (k, sx[1]//k), order='F')]
-            ])
+        # bottom left (UV)
+        UV = Y[m:2*m, :m]
+        UV = quant2(UV, dwtstep[1, col], rise_ratio*dwtstep[1, col])
+        Y[m:2*m, :m] = UV
 
-            sx = sx * 2
-            k = k * 2
-            tm = np.arange(sx[0])
-            tn = np.arange(sx[1])
-            Y[np.ix_(tm, tn)] = Y[np.ix_(
-                tm2.flatten('F'), tn2.flatten('F'))]
+        # bottom right (VV)
+        VV = Y[m:2*m, m:2*m]
+        VV = quant2(VV, dwtstep[2, col], rise_ratio*dwtstep[2, col])
+        Y[m:2*m, m:2*m] = VV
 
-    else:
-        # Invert the grouping:
-        # Determine size of largest sub-image.
-        sx = np.array(X.shape) // 2
-
-        # Regroup the 4 subimages at each level, starting with the largest
-        # subimages in Y.
-        k = N // 2  # Size of blocks of pels at each level.
-
-        # Loop for each level.
-        for _ in np.arange(n):
-            tm = np.arange(sx[0])
-            tn = np.arange(sx[1])
-            tm2 = np.block([
-                [np.reshape(tm, (k, sx[0]//k), order='F')],
-                [np.reshape(tm+sx[0], (k, sx[0]//k), order='F')]
-            ])
-            tn2 = np.block([
-                [np.reshape(tn, (k, sx[1]//k), order='F')],
-                [np.reshape(tn+sx[1], (k, sx[1]//k), order='F')]
-            ])
-
-            Y[np.ix_(tm2.flatten('F'), tn2.flatten('F'))] = Y[np.ix_(
-                np.arange(sx[0]*2), np.arange(sx[1]*2))]
-
-            sx = sx // 2
-            k = k // 2
+    # top left (UU, lowest resolution)
+    UU = Y[:m, :m]
+    UU = quant2(UU, dwtstep[0, n], rise_ratio*dwtstep[0, n])
+    Y[:m, :m] = UU
 
     return Y
-
-
