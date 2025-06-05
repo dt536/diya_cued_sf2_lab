@@ -123,7 +123,7 @@ def CPR_LBT(X, N, s, rms_ref, step_ref, k):
 
     C  = dct_ii(N)
     # 1. find Δ* that gives rms_ref for this s
-    Δ_star, _ = find_step_LBT(X, rms_ref, s=s, N=N, k=k)
+    Δ_star, rms_opt = find_step_LBT(X, rms_ref, s=s, N=N, k=k)
 
     # 2. forward LBT ----------------------------------------------------
     t_slice  = lambda N: np.s_[N//2:-N//2]
@@ -147,4 +147,4 @@ def CPR_LBT(X, N, s, rms_ref, step_ref, k):
     # 4. compression ratio ---------------------------------------------
     CPR   = bits_ref / bits
 
-    return CPR
+    return Δ_star, rms_opt, bits, CPR

@@ -37,7 +37,7 @@ for k in rise1_factors:
     Z2  = recontruct_dct(N, Yq2)                      # inverse transform
     rms = np.std(X - Z2)
     print(f"k={k}, rms={rms}, total bits={total_bits}")
-    bits_list.append(bits)
+    bits_list.append(total_bits)
     rms_list.append(rms)
 
 fig, ax = plt.subplots()
