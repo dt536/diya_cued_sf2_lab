@@ -12,7 +12,7 @@ from compression_schemes.dct_funcs import dctbpp
 
 
 #LBT method
-def lbt_reconstruct(X, N, s, step):
+def lbt_reconstruct(X, N, s, step, k):
     """
     Apply a POT+block-DCT analysis/synthesis to image X and return Zp.
 
@@ -51,7 +51,7 @@ def lbt_reconstruct(X, N, s, step):
 
     # optional quantisation
     
-    Y = quantise(Y, step)
+    Y = quantise(Y, step,k*step)
 
     # ----- 4.  inverse DCT ---------------------------------------------
     Z = colxfm(colxfm(Y.T, C.T).T, C.T)
@@ -64,11 +64,11 @@ def lbt_reconstruct(X, N, s, step):
     return Zp
 
 
-def rms_LBT(X, step:float, s:float, N: int) -> float:
+def rms_LBT(X, step:float, s:float, N: int, k:float) -> float:
     """Return RMS error for an N×N LBT with overlap-parameter *s*
        when the DCT coefficients are quantised with step Δ=*step*."""
     
-    Zp = lbt_reconstruct(X, N, s, step)
+    Zp = lbt_reconstruct(X, N, s, step, k)
     rms_err_Zp = np.std(X- Zp)
     return rms_err_Zp
 
@@ -77,6 +77,7 @@ def find_step_LBT(X,
                   target_err: float, 
                   s: float,
                   N: int,
+                  k: float,
                   lo: float = 1.0,
                   hi: float = 50.0,
                   tol: float = 1e-3,
@@ -86,7 +87,7 @@ def find_step_LBT(X,
     """Binary-search Δ so that rms_LBt(step) ≈ target_err."""    
     for _ in range(max_iter):          # failsafe upper bound
         mid = 0.5 * (lo + hi)
-        e   = rms_LBT(X, mid, s, N)
+        e   = rms_LBT(X, mid, s, N, k)
 
         # stop if we're close enough
         if abs(e - target_err) <= tol:
@@ -103,9 +104,8 @@ def find_step_LBT(X,
 
 
 
-def CPR_LBT(X, N, s, rms_ref, step_ref):
+def CPR_LBT(X, N, s, rms_ref, step_ref, k):
     "Returns the compression ratio at optimal step size "
-
 
     '''Parameters
     ----------
@@ -123,7 +123,7 @@ def CPR_LBT(X, N, s, rms_ref, step_ref):
 
     C  = dct_ii(N)
     # 1. find Δ* that gives rms_ref for this s
-    Δ_star, _ = find_step_LBT(X, rms_ref, s=s, N=N)
+    Δ_star, _ = find_step_LBT(X, rms_ref, s=s, N=N, k=k)
 
     # 2. forward LBT ----------------------------------------------------
     t_slice  = lambda N: np.s_[N//2:-N//2]
@@ -135,7 +135,7 @@ def CPR_LBT(X, N, s, rms_ref, step_ref):
     Y         = colxfm(colxfm(Xp.T, C).T, C)
 
     # 3. quantise and regroup ------------------------------------------
-    Yq   = quantise(Y, Δ_star)
+    Yq   = quantise(Y, Δ_star, k*Δ_star)
     Yr   = regroup(Yq, N) / N
     bits = dctbpp(Yr, 16)
     
