@@ -63,6 +63,48 @@ def lbt_reconstruct(X, N, s, step, k):
 
     return Zp
 
+def find_Yq(X, N, s, step, k):
+    """
+    Apply a POT+block-DCT analysis/synthesis to image X and return Yq.
+
+    Parameters
+    ----------
+    X    : 2-D ndarray
+           Spatial image (zero-mean if you previously subtracted 128).
+    N    : int
+           Block size of the DCT (default 8).
+    s    : float
+           Overlap (scale) parameter for the POT (default 1.4).
+    step : float or None
+           If given, quantise the DCT coefficients with this step
+           before the inverse transform.  If None, no quantisation.
+
+    Returns
+    -------
+    Yq : 2-D ndarray
+         Quantised Y after LBT transformation.
+
+    """
+    # ----- 1.  matrices -------------------------------------------------
+    Pf, Pr = pot_ii(N, s)         # forward & reverse POT filters
+    C      = dct_ii(N)            # orthonormal block DCT
+
+    # slice that selects interior rows/cols (overlapped region)
+    t = np.s_[N//2 : -N//2]
+
+    # ----- 2.  forward POT ---------------------------------------------
+    Xp = X.copy()
+    Xp[t, :] = colxfm(Xp[t, :],  Pf)       # columns
+    Xp[:, t] = colxfm(Xp[:, t].T, Pf).T    # rows
+
+    # ----- 3.  block DCT ------------------------------------------------
+    Y = colxfm(colxfm(Xp.T, C).T, C)
+    # optional quantisation
+    
+    Y = quantise(Y, step,k*step)
+
+    return Y
+
 
 def rms_LBT(X, step:float, s:float, N: int, k:float) -> float:
     """Return RMS error for an N×N LBT with overlap-parameter *s*
