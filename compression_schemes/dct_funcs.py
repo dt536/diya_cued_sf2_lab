@@ -56,7 +56,7 @@ def optimisation_for_DCT(X, Y, C, k, max_iter: int = 100):
     Input: X, Y, C
     Output: optimal step, Yq, Z
     """
-    ls, hs = 0.0, 50.0           # lower / upper bounds
+    ls, hs = 1e-2, 50.0           # lower / upper bounds
     step_size   = hs
     target_rms  = np.std(X-quantise(X, 17))
     tol         = 0.001
@@ -86,6 +86,9 @@ def optimisation_for_DCT(X, Y, C, k, max_iter: int = 100):
 
     return step_size, Yq, Z
 
+
+
+
 def compression_ratio_for_DCT(N, X, Yq):
     Xq = quantise(X, 17)
     Yr = regroup(Yq, N)/N
@@ -93,3 +96,20 @@ def compression_ratio_for_DCT(N, X, Yq):
     no_bits_ref = bpp(Xq)*Xq.size
     compression_ratio = no_bits_ref/no_bits_sub_img
     return compression_ratio
+
+
+def suppress_dct_coefficients(Y, suppress_mask):
+    """
+    Suppress selected DCT coefficients based on a mask.
+    Y: DCT-transformed image
+    suppress_mask: binary mask of shape (8, 8) where 1 = keep, 0 = suppress
+    Returns: suppressed DCT image
+    """
+    N = 8
+    Y_suppressed = np.zeros_like(Y)
+    for i in range(0, Y.shape[0], N):
+        for j in range(0, Y.shape[1], N):
+            block = Y[i:i+N, j:j+N]
+            block_suppressed = block * suppress_mask
+            Y_suppressed[i:i+N, j:j+N] = block_suppressed
+    return Y_suppressed
