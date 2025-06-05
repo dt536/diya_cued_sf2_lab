@@ -5,9 +5,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from cued_sf2_lab.familiarisation import load_mat_img
 from cued_sf2_lab.laplacian_pyramid import quantise, bpp
-from dct_funcs import perform_dct, recontruct_dct, dctbpp    
+from dct_funcs import *    
 from dwt_funcs import *
 from lbt_functions import *
+from subjective_quality import *
 # -------------------------------------------------------------
 #  Set-up
 # -------------------------------------------------------------
@@ -98,3 +99,18 @@ for k, rms, bits, cpr in results:
     ax.plot(rms, cpr, 'o', label=f"rise1={k:.1f}×Δ")
 ax.legend()
 plt.show()
+
+
+
+
+keep_fracs = [1.0, 0.75, 0.5, 0.25]
+results = []
+for f in keep_fracs:
+    for k in rise1_factors:
+        Δ, rms, bits, cpr = CPR_LBT_suppressed(X, N=8, s=1.4, rms_ref=target_rms, step_ref=17, k=k, keep_fraction=f)
+        Yq = lbt_reconstruct(X, N, np.sqrt(2), Δ, k)
+        similarity = ssim(X, Yq) 
+        print(f"keep {int(f*100)}%, rise1={k:.1f} → Δ={Δ:.2f}, RMS={rms:.3f}, bits={bits:.0f}, CPR={cpr:.2f}, similarity = {similarity}")
+        results.append((f, k, Δ, rms, bits, cpr, similarity))
+
+       

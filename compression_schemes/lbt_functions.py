@@ -7,7 +7,7 @@ from cued_sf2_lab.familiarisation import load_mat_img, plot_image
 from cued_sf2_lab.laplacian_pyramid import quantise,bpp
 from cued_sf2_lab.dct import colxfm, regroup
 from cued_sf2_lab.lbt import pot_ii, dct_ii
-from dct_funcs import dctbpp
+from dct_funcs import *
 
 
 
@@ -189,4 +189,65 @@ def CPR_LBT(X, N, s, rms_ref, step_ref, k):
     # 4. compression ratio ---------------------------------------------
     CPR   = bits_ref / bits
 
+    return Δ_star, rms_opt, bits, CPR
+
+
+
+
+def suppress_lbt_coefficients(Y, suppress_mask, N):
+    """
+    Suppress selected LBT DCT coefficients based on a binary mask.
+
+    Parameters
+    ----------
+    Y : 2D ndarray
+        LBT-transformed image (output of colxfm).
+    suppress_mask : 2D ndarray (N x N)
+        1 = keep, 0 = suppress.
+    N : int
+        Block size.
+
+    Returns
+    -------
+    Y_suppressed : 2D ndarray
+        LBT coefficients after suppression.
+    """
+    Y_suppressed = np.zeros_like(Y)
+    for i in range(0, Y.shape[0], N):
+        for j in range(0, Y.shape[1], N):
+            block = Y[i:i+N, j:j+N]
+            block_suppressed = block * suppress_mask
+            Y_suppressed[i:i+N, j:j+N] = block_suppressed
+    return Y_suppressed
+
+
+
+
+def CPR_LBT_suppressed(X, N, s, rms_ref, step_ref, k, keep_fraction):
+    "Like CPR_LBT but applies coefficient suppression"
+    C = dct_ii(N)
+    Δ_star, rms_opt = find_step_LBT(X, rms_ref, s=s, N=N, k=k)
+
+    # LBT forward
+    t = np.s_[N//2:-N//2]
+    Pf, Pr = pot_ii(N, s)
+    Xp = X.copy()
+    Xp[t, :] = colxfm(Xp[t, :], Pf)
+    Xp[:, t] = colxfm(Xp[:, t].T, Pf).T
+    Y = colxfm(colxfm(Xp.T, C).T, C)
+
+    # Suppress high-freq coefficients
+    mask = generate_suppress_mask(N, keep_fraction)
+    Y_suppressed = suppress_lbt_coefficients(Y, mask, N)
+
+    # Quantise and regroup
+    Yq = quantise(Y_suppressed, Δ_star, k*Δ_star)
+    Yr = regroup(Yq, N)/N
+    bits = dctbpp(Yr, 16)
+
+    Xq = quantise(X, step_ref)
+    bits_ref = bpp(Xq) * Xq.size
+    rms_ref = np.std(X - Xq)
+
+    CPR = bits_ref / bits
     return Δ_star, rms_opt, bits, CPR
