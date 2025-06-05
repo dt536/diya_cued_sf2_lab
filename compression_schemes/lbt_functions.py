@@ -7,7 +7,7 @@ from cued_sf2_lab.familiarisation import load_mat_img, plot_image
 from cued_sf2_lab.laplacian_pyramid import quantise,bpp
 from cued_sf2_lab.dct import colxfm, regroup
 from cued_sf2_lab.lbt import pot_ii, dct_ii
-from compression_schemes.dct_funcs import dctbpp
+from dct_funcs import dctbpp
 
 
 
