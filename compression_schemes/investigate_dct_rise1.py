@@ -8,6 +8,7 @@ from cued_sf2_lab.laplacian_pyramid import quantise, bpp
 from dct_funcs import perform_dct, recontruct_dct, dctbpp    
 from dwt_funcs import *
 from dct_funcs import *
+from subjective_quality import *
 # -------------------------------------------------------------
 #  Set-up
 # -------------------------------------------------------------
@@ -97,14 +98,7 @@ plt.show()
 
 print("Investigating suppression of high-frequency DCT coefficients")
 
-# Define suppression masks: keep low frequencies, zero out highs
-def generate_suppress_mask(N, keep_fraction):
-    mask = np.zeros((N, N))
-    limit = int(N * keep_fraction)
-    for i in range(limit):
-        for j in range(limit - i):
-            mask[i, j] = 1
-    return mask
+# suppression masks: keep low frequencies, zero out highs
 
 fractions = [1.0, 0.75, 0.5, 0.25]  # keep 100%, 75%, 50%, 25% of low frequencies
 results_suppression = []
@@ -149,47 +143,15 @@ for f in fractions:
         # Quantise suppressed DCT with rise1 and optimal step size
         opt_step, Yq, Z = optimisation_for_DCT(X, Y_suppressed, C, k=k, max_iter= 100)
 
-        '''# Reconstruct and measure
-        Z = recontruct_dct(N, Yq)
-        rms = np.std(X - Z)
-        Yr = regroup(Yq, N) / N
-        bits = dctbpp(Yr, N)
-        cpr = bits_ref / bits
-        combined_results.append((f, k, rms, bits, cpr))
-        print(f"Keep {int(f*100)}% LF, rise1={k:.1f} → RMS={rms:.3f}, Bits={bits:.0f}, CPR={cpr:.2f}")'''
-
         rms = np.std(X - Z)
 
         Yr = regroup(Yq, N)/N              # regroup for entropy calc
 
         bits   = dctbpp(Yr, N)                       # always 16×16 regroup
         cpr    = bits_ref / bits
-        #CPR = compression_ratio_for_DCT(N, X, Yq)  or use this function to find CPR
-        
+        simi = ssim(X, Z)
+        #CPR = compression_ratio_for_DCT(N, X, Yq)  or use this function to find CPR        
         results.append((k, rms, bits, cpr))
-        print(f"rise1/step = {k:3.1f} → opt_step = {opt_step}, RMS={rms:6.3f}, bits={bits:,.0f}, CPR={cpr:4.2f}")
+        print(f"fraction = {f}, rise1/step = {k:3.1f} → opt_step = {opt_step}, RMS={rms:6.3f}, bits={bits:,.0f}, CPR={cpr:4.2f}, Similarity = {simi}")
 
-
-
-
-#print("Optimising step size for CPR with suppressed DCT and rise1 quantisation")
-
-
-
-
-"Find the CPR when rms matched to reference for different k values"
-results  = []                              # (rise1, rms, bits, cpr)
-
-for k in rise1_factors:
-    opt_step, Yq, Z = optimisation_for_DCT(X, Y_suppressed, C, k=k, max_iter= 1000)
-    #Yq = quantise(Y, step_ref, rise1=k*step_ref)    # centre-clipped
-    #Z  = recontruct_dct(N, Yq)                      # inverse transform
-    Yr = regroup(Yq, N)/N              # regroup for entropy calc
-
-    bits   = dctbpp(Yr, N)                       # always 16×16 regroup
-    cpr    = bits_ref / bits
-    #CPR = compression_ratio_for_DCT(N, X, Yq)  or use this function to find CPR
-    
-    results.append((k, Yq, bits, cpr))
-    print(f"rise1/step = {k:3.1f} → opt_step = {opt_step}, RMS={e:6.3f}, bits={bits:,.0f}, CPR={cpr:4.2f}")
 
