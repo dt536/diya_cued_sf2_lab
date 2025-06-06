@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 from cued_sf2_lab.familiarisation import load_mat_img
 from cued_sf2_lab.laplacian_pyramid import quantise, bpp
 from dct_funcs import *    
-from dwt_funcs import *
 from lbt_functions import *
 from subjective_quality import *
+from dwt_funcs import zero_mean
 # -------------------------------------------------------------
 #  Set-up
 # -------------------------------------------------------------

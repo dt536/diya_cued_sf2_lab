@@ -97,7 +97,7 @@ def compression_ratio_for_DCT(N, X, Yq):
     compression_ratio = no_bits_ref/no_bits_sub_img
     return compression_ratio
 
-print("Investigating suppression of high-frequency DCT coefficients")
+
 
 # Define suppression masks: keep low frequencies, zero out highs
 def generate_suppress_mask(N, keep_fraction):

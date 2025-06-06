@@ -191,7 +191,7 @@ def energy_from_impulse(N, n, amplitude=100.0):
     return energies
 
 
-def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio=0.5, max_iter: int = 100):
+def optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio=0.5, max_iter: int = 1000):
     """
     This function computes the equal mse optimum step size for quantisation
     Input: X, Y, n
