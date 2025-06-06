@@ -64,7 +64,7 @@ def lbt_reconstruct(X, N, s, step, rise_ratio):
 
     return Zp
 
-def find_Yq(X, N, s):
+def forward_LBT(X, N, s):
     """
     Apply a POT+block-DCT analysis/synthesis to image X and return Yq.
 
@@ -249,3 +249,19 @@ def CPR_LBT_suppressed(X, N, s, rms_ref, step_ref, rise_ratio, keep_fraction):
 
     CPR = bits_ref / bits
     return Δ_star, rms_opt, bits, CPR
+
+def inverse_LBT(Y, N, s):
+    # ----- 1.  matrices -------------------------------------------------
+    Pf, Pr = pot_ii(N, s)         # forward & reverse POT filters
+    C      = dct_ii(N)            # orthonormal block DCT
+    # slice that selects interior rows/cols (overlapped region)
+    t = np.s_[N//2 : -N//2]
+    # ----- 4.  inverse DCT ---------------------------------------------
+    Z = colxfm(colxfm(Y.T, C.T).T, C.T)
+
+    # ----- 5.  post-filter ---------------------------------------------
+    Zp = Z.copy()
+    Zp[:, t] = colxfm(Zp[:, t].T, Pr.T).T  # rows
+    Zp[t, :] = colxfm(Zp[t, :],  Pr.T)     # columns
+
+    return Zp

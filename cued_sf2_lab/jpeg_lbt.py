@@ -519,7 +519,7 @@ def jpegenc_lbt(X: np.ndarray, qstep: float, rise_ratio=0.5, N: int = 8, M: int 
     # DCT on input image X.
     if log:
         print("Applying POT filter + DCT analysis")
-    Y = find_Yq(X, N, np.sqrt(2))
+    Y = forward_LBT(X, N, np.sqrt(2))
 
     # Quantise to integers.
     if log:
@@ -607,7 +607,7 @@ def jpegenc_lbt(X: np.ndarray, qstep: float, rise_ratio=0.5, N: int = 8, M: int 
     return vlc, dhufftab, totalbits
 
 
-def jpegdec_lbt(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
+def jpegdec_lbt(vlc: np.ndarray, qstep: float, rise_ratio, N: int = 8, M: int = 8,
         hufftab: Optional[HuffmanTable] = None,
         dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
         ) -> np.ndarray:
@@ -618,6 +618,8 @@ def jpegdec_lbt(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
 
         vlc: variable length output code from jpegenc
         qstep: quantisation step to use in decoding
+        n:
+        rise_ratio 
         N: width of the DCT block (defaults to 8)
         M: width of each block to be coded (defaults to N). Must be an
             integer multiple of N - if it is larger, individual blocks are
@@ -632,7 +634,6 @@ def jpegdec_lbt(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
 
         Z: the output greyscale image
     '''
-
     opthuff = (hufftab is not None)
     if M % N != 0:
         raise ValueError('M must be an integer multiple of N!')
@@ -727,13 +728,11 @@ def jpegdec_lbt(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
     if log:
         print('Inverse quantising to step size of {}'.format(qstep))
 
-    Zi = quant2(Zq, qstep, qstep)
+    Zi = quant2(Zq, qstep, qstep*rise_ratio)
 
     if log:
-        print('Inverse {} x {} DCT\n'.format(N, N))
-    C8 = dct_ii(N)
-    Z = colxfm(colxfm(Zi.T, C8.T).T, C8.T)
-
+        print('Inverse {} x {} LBT\n'.format(N, N))
+    Z = inverse_LBT(Zi, N, s=np.sqrt(2))
     return Z
 
 
