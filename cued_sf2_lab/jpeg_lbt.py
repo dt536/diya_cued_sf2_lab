@@ -8,6 +8,7 @@ import numpy as np
 from .laplacian_pyramid import quant1, quant2
 from .dct import dct_ii, colxfm, regroup
 from .bitword import bitword
+from compression_schemes.lbt_functions import *
 
 __all__ = [
     "diagscan",
@@ -487,7 +488,7 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-def jpegenc_lbt(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
+def jpegenc_lbt(X: np.ndarray, qstep: float, rise_ratio=0.5, N: int = 8, M: int = 8,
         opthuff: bool = False, dcbits: int = 8, log: bool = True
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
@@ -517,14 +518,13 @@ def jpegenc_lbt(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
 
     # DCT on input image X.
     if log:
-        print('Forward {} x {} LBT'.format(N, N))
-    C8 = dct_ii(N)
-    Y = colxfm(colxfm(X, C8).T, C8).T
+        print("Applying POT filter + DCT analysis")
+    Y = find_Yq(X, N, np.sqrt(2))
 
     # Quantise to integers.
     if log:
         print('Quantising to step size of {}'.format(qstep))
-    Yq = quant1(Y, qstep, qstep).astype('int')
+    Yq = quant1(Y, qstep, qstep*rise_ratio).astype('int')
 
     # Generate zig-zag scan of AC coefs.
     scan = diagscan(M)
@@ -567,7 +567,8 @@ def jpegenc_lbt(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
     if not opthuff:
         if log:
             print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
-        return vlc, dhufftab
+        totalbits = sum(vlc[:, 1])
+        return vlc, dhufftab, totalbits
 
     # Design custom huffman tables.
     if log:
@@ -602,8 +603,8 @@ def jpegenc_lbt(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
         print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
         print('Bits for huffman table = {}'.format(
             (16 + max(dhufftab.huffval.shape))*8))
-
-    return vlc, dhufftab
+    totalbits = vlc[:,1].sum() + ((16 + max(dhufftab.huffval.shape))*8)
+    return vlc, dhufftab, totalbits
 
 
 def jpegdec_lbt(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,

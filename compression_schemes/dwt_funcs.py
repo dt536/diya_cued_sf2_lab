@@ -47,7 +47,7 @@ def quantdwt(Y: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5):
         rise_ratio: the scaling factor for rise1
     Returns:
         Yq: the quantized version of `Y`
-        dwtenc: an array of shape `(3, n+1)` containing the entropies
+        dwtent: an array of shape `(3, n+1)` containing the entropies
     """
     # your code here
     Yq = Y.copy()
@@ -119,7 +119,7 @@ def compression_ratio_for_DWT(X, Yq, dwtent):
     """
     This function computes the compression ratio for a given dwt scheme
     Input: X, Yq, dwtent
-    Output: compression_ratio
+    Output: compression_ratio, num_bits
     """
     num_bits = 0.0
     m = Yq.shape[0]
@@ -136,7 +136,7 @@ def compression_ratio_for_DWT(X, Yq, dwtent):
     Xq = quantise(X, 17)
     no_bits_ref = bpp(Xq)*Xq.size
     compression_ratio = no_bits_ref/num_bits
-    return compression_ratio
+    return compression_ratio, num_bits
 
 
 def get_sub_img_regions(N, n):

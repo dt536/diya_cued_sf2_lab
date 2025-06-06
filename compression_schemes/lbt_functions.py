@@ -64,7 +64,7 @@ def lbt_reconstruct(X, N, s, step, rise_ratio):
 
     return Zp
 
-def find_Yq(X, N, s, step, rise_ratio):
+def find_Yq(X, N, s):
     """
     Apply a POT+block-DCT analysis/synthesis to image X and return Yq.
 
@@ -100,9 +100,6 @@ def find_Yq(X, N, s, step, rise_ratio):
 
     # ----- 3.  block DCT ------------------------------------------------
     Y = colxfm(colxfm(Xp.T, C).T, C)
-    # optional quantisation
-    
-    Y = quantise(Y, step,rise_ratio*step)
 
     return Y
 
