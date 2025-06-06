@@ -512,14 +512,10 @@ def jpegenc_dwt(X: np.ndarray, n, step_multiplier, rise_ratio,
         hufftab: optional outputs containing the Huffman encoding
             used in compression when `opthuff` is ``True``.
     '''
-
-    Y = nlevdwt(X, n)
-    energies = energy_from_impulse(m, n)
-    step_ratios = 1 / np.sqrt(energies)
-    step_ratios /= step_ratios[0][0]
-    steps = step_multiplier *
-    N = 2**n
+    step_ratios= get_step_ratios(256,n)
+    steps = step_multiplier * step_ratios
     M = 2**n
+    N = 2**n
     if M % N != 0:
         raise ValueError('M must be an integer multiple of N!')
 

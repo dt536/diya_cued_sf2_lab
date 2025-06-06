@@ -239,7 +239,19 @@ def diff_step_sizes(X, m, n, target_rms, rise_ratio=0.5):
     step_ratios /= step_ratios[0][0]
     opt_step, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio)
     return(opt_step, step_ratios, scaled, Yq, dwtent, Z)
-    
+
+def get_step_ratios(m, n):
+    """This function calculate the step size ratio for an qual mse scheme
+    inputs：m = the size of image
+            n = the number of layers
+    Outout: step_ratio matrix"""
+    energies = energy_from_impulse(m, n)
+    step_ratios = 1 / np.sqrt(energies)
+    step_ratios /= step_ratios[0][0]
+    return step_ratios
+
+
+
 def quant1dwt(Y: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5):
     """
     Parameters:
@@ -323,22 +335,21 @@ def quant2dwt(Yq: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5) -> np.ndarray
     return Y
 
 
-vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
-
 
 
 # ---------------------------------------------------------------------
 #  NEW  ✦  Step size that meets a target bit-budget
 # ---------------------------------------------------------------------
 def step_from_target_bits_DWT(X: np.ndarray,
-                              s: float,
-                              N: int,
-                              rise_ratio: float,
+                              n: int,
                               target_bits: float,
+                              rise_ratio=1.0, 
                               lo: float = 1.0,
                               hi: float = 50.0,
                               tol_bits: float = 500.0,
+                              dcbits: int = 10,
                               max_iter: int = 5000):
+
     """
     Find the step size Δ such that the DWT bit-count ≈ target_bits.
 
@@ -362,21 +373,22 @@ def step_from_target_bits_DWT(X: np.ndarray,
     """
     # helper: forward LBT analysis, quantise, count bits
 
-    vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
+
+   
 
     # binary search for Δ so that bits ≈ target_bits
     for _ in range(max_iter):
-        step = 0.5 * (lo + hi)
-        vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
+        step_multiplier = 0.5 * (lo + hi)
+        vlc, dhufftab, totalbits = jpegenc_dwt(X, n,  step_multiplier, rise_ratio, dcbits=dcbits, opthuff=True, log=False)
 
         if abs(totalbits - target_bits) <= tol_bits:
             break
 
-        if totalbitsbits > target_bits:     # too many bits ⇒ need larger Δ
-            lo = step
+        if totalbits > target_bits:     # too many bits ⇒ need larger Δ
+            lo = step_multiplier
         else:                       # too few bits ⇒ need smaller Δ
-            hi = step
+            hi = step_multiplier
     else:
         print("Warning: max_iter reached without hitting target_bits")
 
-    return step, totalbits, Yq, Zp
+    return step_multiplier
