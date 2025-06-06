@@ -1,8 +1,15 @@
 from cued_sf2_lab.dwt import idwt
 from cued_sf2_lab.dwt import dwt
 from cued_sf2_lab.laplacian_pyramid import quantise, quant1, quant2, bpp
-from cued_sf2_lab.jpeg_dwt import *
 import numpy as np
+
+
+__all__ = [
+    'zero_mean', 'nlevdwt', 'nlevidwt', 'quantdwt', 'quant1dwt', 'quant2dwt',
+    'optimisation_for_DWT', 'compression_ratio_for_DWT',
+    'get_sub_img_regions', 'energy_from_impulse', 'get_step_ratios',
+    'optimisation_for_DWT_MSE', 'diff_step_sizes'
+]
 
 def zero_mean(X):
     return (X - 128.0)
@@ -335,60 +342,3 @@ def quant2dwt(Yq: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5) -> np.ndarray
     return Y
 
 
-
-
-# ---------------------------------------------------------------------
-#  NEW  ✦  Step size that meets a target bit-budget
-# ---------------------------------------------------------------------
-def step_from_target_bits_DWT(X: np.ndarray,
-                              n: int,
-                              target_bits: float,
-                              rise_ratio=1.0, 
-                              lo: float = 1.0,
-                              hi: float = 50.0,
-                              tol_bits: float = 500.0,
-                              dcbits: int = 10,
-                              max_iter: int = 5000):
-
-    """
-    Find the step size Δ such that the DWT bit-count ≈ target_bits.
-
-    Parameters
-    ----------
-    X           : 2-D ndarray (zero-mean image)
-    s           : float   – overlap parameter of the POT
-    N           : int     – block size (8 by default)
-    k           : float   – rise1/Δ factor
-    target_bits : float   – desired total bit budget
-    lo, hi      : float   – initial search bounds for Δ
-    tol_bits    : float   – acceptable absolute error in bits
-    max_iter    : int     – failsafe iteration cap
-
-    Returns
-    -------
-    Δ_opt  : float  – step size meeting the target bit-rate
-    bits   : float  – bit-count at Δ_opt
-    Yq_opt : ndarray – quantised coefficient array at Δ_opt
-    Zp_opt : ndarray – reconstructed spatial image at Δ_opt
-    """
-    # helper: forward LBT analysis, quantise, count bits
-
-
-   
-
-    # binary search for Δ so that bits ≈ target_bits
-    for _ in range(max_iter):
-        step_multiplier = 0.5 * (lo + hi)
-        vlc, dhufftab, totalbits = jpegenc_dwt(X, n,  step_multiplier, rise_ratio, dcbits=dcbits, opthuff=True, log=False)
-
-        if abs(totalbits - target_bits) <= tol_bits:
-            break
-
-        if totalbits > target_bits:     # too many bits ⇒ need larger Δ
-            lo = step_multiplier
-        else:                       # too few bits ⇒ need smaller Δ
-            hi = step_multiplier
-    else:
-        print("Warning: max_iter reached without hitting target_bits")
-
-    return step_multiplier

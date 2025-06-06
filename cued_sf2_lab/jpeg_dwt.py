@@ -9,7 +9,7 @@ from .laplacian_pyramid import quant1, quant2
 from .dct import dct_ii, colxfm, regroup
 from .bitword import bitword
 import numpy as np
-from compression_schemes.dwt_funcs import*
+from compression_schemes.dwt_funcs import *
 
 __all__ = [
     "diagscan",
@@ -610,7 +610,7 @@ def jpegenc_dwt(X: np.ndarray, n, step_multiplier, rise_ratio,
     return vlc, dhufftab, totalbits
 
 
-def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio, 
+def jpegdec_dwt(vlc: np.ndarray, n, step_multiplier, rise_ratio, 
         hufftab: Optional[HuffmanTable] = None,
         dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
         ) -> np.ndarray:
@@ -634,6 +634,8 @@ def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio,
 
         Z: the output greyscale image
     '''
+    step_ratios= get_step_ratios(256,n)
+    steps = step_multiplier * step_ratios
     N = 2**n
     M = 2**n
     opthuff = (hufftab is not None)
