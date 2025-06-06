@@ -1,6 +1,7 @@
 from cued_sf2_lab.dwt import idwt
 from cued_sf2_lab.dwt import dwt
 from cued_sf2_lab.laplacian_pyramid import quantise, quant1, quant2, bpp
+from cued_sf2_lab.jpeg_dwt import *
 import numpy as np
 
 def zero_mean(X):
@@ -237,7 +238,7 @@ def diff_step_sizes(X, m, n, target_rms, rise_ratio=0.5):
     step_ratios = 1 / np.sqrt(energies)
     step_ratios /= step_ratios[0][0]
     opt_step, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio)
-    return(opt_step, scaled, Yq, dwtent, Z)
+    return(opt_step, step_ratios, scaled, Yq, dwtent, Z)
     
 def quant1dwt(Y: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5):
     """
@@ -332,7 +333,7 @@ vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio
 def step_from_target_bits_DWT(X: np.ndarray,
                               s: float,
                               N: int,
-                              k: float,
+                              rise_ratio: float,
                               target_bits: float,
                               lo: float = 1.0,
                               hi: float = 50.0,
@@ -360,12 +361,9 @@ def step_from_target_bits_DWT(X: np.ndarray,
     Zp_opt : ndarray – reconstructed spatial image at Δ_opt
     """
     # helper: forward LBT analysis, quantise, count bits
-    def _quantise_and_bits(step):
-        Yq = find_Yq(X, N, s, step, k)         # quantise only
-        bits = lbt_bits(Yq, N)
-        return Yq, bits
 
     vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
+
     # binary search for Δ so that bits ≈ target_bits
     for _ in range(max_iter):
         step = 0.5 * (lo + hi)
@@ -374,14 +372,11 @@ def step_from_target_bits_DWT(X: np.ndarray,
         if abs(totalbits - target_bits) <= tol_bits:
             break
 
-        if bits > target_bits:     # too many bits ⇒ need larger Δ
+        if totalbitsbits > target_bits:     # too many bits ⇒ need larger Δ
             lo = step
         else:                       # too few bits ⇒ need smaller Δ
             hi = step
     else:
         print("Warning: max_iter reached without hitting target_bits")
 
-    # inverse-transform to give reconstructed image
-    Zp = lbt_reconstruct(X, N, s, step, k)
-
-    return step, bits, Yq, Zp
+    return step, totalbits, Yq, Zp

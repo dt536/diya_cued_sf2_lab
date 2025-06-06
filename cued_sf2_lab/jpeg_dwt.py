@@ -489,7 +489,7 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio, 
+def jpegenc_dwt(X: np.ndarray, n, step_multiplier, rise_ratio, 
         opthuff: bool = False, dcbits: int = 8, log: bool = True
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
@@ -512,6 +512,12 @@ def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio,
         hufftab: optional outputs containing the Huffman encoding
             used in compression when `opthuff` is ``True``.
     '''
+
+    Y = nlevdwt(X, n)
+    energies = energy_from_impulse(m, n)
+    step_ratios = 1 / np.sqrt(energies)
+    step_ratios /= step_ratios[0][0]
+    steps = step_multiplier *
     N = 2**n
     M = 2**n
     if M % N != 0:
