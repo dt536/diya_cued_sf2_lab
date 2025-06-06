@@ -58,7 +58,7 @@ def optimisation_for_DCT(X, Y, C, k, max_iter: int = 100):
     """
     ls, hs = 1e-2, 50.0           # lower / upper bounds
     step_size   = hs
-    target_rms  = np.std(X-quantise(X, 17))
+    target_rms  = np.std(X-quantise(X, 25))
     tol         = 0.001
     Yq = quantise(Y, step_size, rise1=k*step_size)
     Z = colxfm(colxfm(Yq.T, C.T).T, C.T)
@@ -90,7 +90,7 @@ def optimisation_for_DCT(X, Y, C, k, max_iter: int = 100):
 
 
 def compression_ratio_for_DCT(N, X, Yq):
-    Xq = quantise(X, 17)
+    Xq = quantise(X, 25)
     Yr = regroup(Yq, N)/N
     no_bits_sub_img = dctbpp(Yr, N)
     no_bits_ref = bpp(Xq)*Xq.size
@@ -101,6 +101,8 @@ def compression_ratio_for_DCT(N, X, Yq):
 
 # Define suppression masks: keep low frequencies, zero out highs
 def generate_suppress_mask(N, keep_fraction):
+    if keep_fraction >= 1.0:
+        return np.ones((N, N))        # keep everything
     mask = np.zeros((N, N))
     limit = int(N * keep_fraction)
     for i in range(limit):
