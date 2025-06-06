@@ -8,8 +8,6 @@ import numpy as np
 from .laplacian_pyramid import quant1, quant2
 from .dct import dct_ii, colxfm, regroup
 from .bitword import bitword
-import numpy as np
-from compression_schemes.dwt_funcs import*
 
 __all__ = [
     "diagscan",
@@ -19,8 +17,8 @@ __all__ = [
     "huffdes",
     "huffenc",
     "dwtgroup",
-    "jpegenc_dwt",
-    "jpegdec_dwt",
+    "jpegenc",
+    "jpegdec",
     "vlctest",
 ]
 
@@ -489,7 +487,7 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio, 
+def jpegenc(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
         opthuff: bool = False, dcbits: int = 8, log: bool = True
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
@@ -497,10 +495,11 @@ def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio,
 
     Parameters:
         X: the input greyscale image
-       dwstep: the quantisation steps to use in encoding
-       n: the number of dwt layers
-       steps: matrix of optimal steps
-       rise_ratio
+        qstep: the quantisation step to use in encoding
+        N: the width of the DCT block (defaults to 8)
+        M: the width of each block to be coded (defaults to N). Must be an
+            integer multiple of N - if it is larger, individual blocks are
+            regrouped.
         opthuff: if true, the Huffman table is optimised based on the data in X
         dcbits: the number of bits to use to encode the DC coefficients
             of the DCT.
@@ -512,21 +511,21 @@ def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio,
         hufftab: optional outputs containing the Huffman encoding
             used in compression when `opthuff` is ``True``.
     '''
-    N = 2**n
-    M = 2**n
+
     if M % N != 0:
         raise ValueError('M must be an integer multiple of N!')
 
-    # DWT on input image X and quantise.
+    # DCT on input image X.
     if log:
-        print('Forward {} DWT'.format(n))
-    Y = nlevdwt(X, n)
-    Yq = quant1dwt(Y, steps, rise_ratio)
-    # Regrouping 
+        print('Forward {} x {} DCT'.format(N, N))
+    C8 = dct_ii(N)
+    Y = colxfm(colxfm(X, C8).T, C8).T
+
+    # Quantise to integers.
     if log:
-        print('Regrouping into {} x {} blocks'.format(2**n, 2**n))
-    Yq = dwtgroup(Yq, n)
-    Yq = np.round(Yq).astype(int)
+        print('Quantising to step size of {}'.format(qstep))
+    Yq = quant1(Y, qstep, qstep).astype('int')
+
     # Generate zig-zag scan of AC coefs.
     scan = diagscan(M)
 
@@ -553,7 +552,8 @@ def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio,
             # Encode DC coefficient first
             dccoef = yqflat[0] + 2 ** (dcbits-1)
             if dccoef not in range(2**dcbits):
-                print(f"Bad DC coef: {yqflat[0]}, shifted: {dccoef}, allowed: 0-{2**dcbits - 1}")
+                raise ValueError(
+                    'DC coefficients too large for desired number of bits')
             vlc.append(np.array([[dccoef, dcbits]]))
             # Encode the other AC coefficients in scan order
             # huffenc() also updates huffhist.
@@ -567,8 +567,7 @@ def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio,
     if not opthuff:
         if log:
             print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
-        totalbits = vlc[:,1].sum() + ((16 + max(dhufftab.huffval.shape))*8)
-        return vlc, dhufftab, totalbits
+        return vlc, dhufftab
 
     # Design custom huffman tables.
     if log:
@@ -603,12 +602,11 @@ def jpegenc_dwt(X: np.ndarray, n, steps, rise_ratio,
         print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
         print('Bits for huffman table = {}'.format(
             (16 + max(dhufftab.huffval.shape))*8))
-        
-    totalbits = vlc[:,1].sum() + ((16 + max(dhufftab.huffval.shape))*8)
-    return vlc, dhufftab, totalbits
+
+    return vlc, dhufftab
 
 
-def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio, 
+def jpegdec(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
         hufftab: Optional[HuffmanTable] = None,
         dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
         ) -> np.ndarray:
@@ -619,9 +617,10 @@ def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio,
 
         vlc: variable length output code from jpegenc
         qstep: quantisation step to use in decoding
-        n: the number of layers
-        steps: matrix of optimal steps
-        rise_ratio
+        N: width of the DCT block (defaults to 8)
+        M: width of each block to be coded (defaults to N). Must be an
+            integer multiple of N - if it is larger, individual blocks are
+            regrouped.
         hufftab: if supplied, these will be used in Huffman decoding
             of the data, otherwise default tables are used
         dcbits: the number of bits to use to decode the DC coefficients
@@ -632,8 +631,7 @@ def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio,
 
         Z: the output greyscale image
     '''
-    N = 2**n
-    M = 2**n
+
     opthuff = (hufftab is not None)
     if M % N != 0:
         raise ValueError('M must be an integer multiple of N!')
@@ -725,9 +723,15 @@ def jpegdec_dwt(vlc: np.ndarray, n, steps, rise_ratio,
                 yq = regroup(yq, M//N)
             Zq[r:r+M, c:c+M] = yq
 
-    Z_reg = dwtgroup(Zq, -n)
-    Zq = quant2dwt(Z_reg, steps, rise_ratio)
-    Z = nlevidwt(Zq, n)
+    if log:
+        print('Inverse quantising to step size of {}'.format(qstep))
+
+    Zi = quant2(Zq, qstep, qstep)
+
+    if log:
+        print('Inverse {} x {} DCT\n'.format(N, N))
+    C8 = dct_ii(N)
+    Z = colxfm(colxfm(Zi.T, C8.T).T, C8.T)
 
     return Z
 
