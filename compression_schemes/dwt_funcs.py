@@ -320,3 +320,70 @@ def quant2dwt(Yq: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5) -> np.ndarray
     Y[:m, :m] = UU
 
     return Y
+
+
+vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
+
+
+
+# ---------------------------------------------------------------------
+#  NEW  ✦  Step size that meets a target bit-budget
+# ---------------------------------------------------------------------
+def step_from_target_bits_DWT(X: np.ndarray,
+                              s: float,
+                              N: int,
+                              k: float,
+                              target_bits: float,
+                              lo: float = 1.0,
+                              hi: float = 50.0,
+                              tol_bits: float = 500.0,
+                              max_iter: int = 5000):
+    """
+    Find the step size Δ such that the LBT bit-count ≈ target_bits.
+
+    Parameters
+    ----------
+    X           : 2-D ndarray (zero-mean image)
+    s           : float   – overlap parameter of the POT
+    N           : int     – block size (8 by default)
+    k           : float   – rise1/Δ factor
+    target_bits : float   – desired total bit budget
+    lo, hi      : float   – initial search bounds for Δ
+    tol_bits    : float   – acceptable absolute error in bits
+    max_iter    : int     – failsafe iteration cap
+
+    Returns
+    -------
+    Δ_opt  : float  – step size meeting the target bit-rate
+    bits   : float  – bit-count at Δ_opt
+    Yq_opt : ndarray – quantised coefficient array at Δ_opt
+    Zp_opt : ndarray – reconstructed spatial image at Δ_opt
+    """
+    # helper: forward LBT analysis, quantise, count bits
+    def _quantise_and_bits(step):
+        Yq = find_Yq(X, N, s, step, k)         # quantise only
+        bits = lbt_bits(Yq, N)
+        return Yq, bits
+
+    Δ_low, Δ_high = lo, hi
+    Yq, bits = _quantise_and_bits(Δ_high)
+
+    # binary search for Δ so that bits ≈ target_bits
+    for _ in range(max_iter):
+        step = 0.5 * (Δ_low + Δ_high)
+        Yq, bits = _quantise_and_bits(step)
+
+        if abs(bits - target_bits) <= tol_bits:
+            break
+
+        if bits > target_bits:     # too many bits ⇒ need larger Δ
+            Δ_low = step
+        else:                       # too few bits ⇒ need smaller Δ
+            Δ_high = step
+    else:
+        print("Warning: max_iter reached without hitting target_bits")
+
+    # inverse-transform to give reconstructed image
+    Zp = lbt_reconstruct(X, N, s, step, k)
+
+    return step, bits, Yq, Zp
