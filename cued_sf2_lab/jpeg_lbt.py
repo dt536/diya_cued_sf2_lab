@@ -17,8 +17,8 @@ __all__ = [
     "huffdes",
     "huffenc",
     "dwtgroup",
-    "jpegenc",
-    "jpegdec",
+    "jpegenc_lbt",
+    "jpegdec_lbt",
     "vlctest",
 ]
 
@@ -487,7 +487,7 @@ def dwtgroup(X: np.ndarray, n: int) -> np.ndarray:
     return Y
 
 
-def jpegenc(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
+def jpegenc_lbt(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
         opthuff: bool = False, dcbits: int = 8, log: bool = True
         ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
@@ -517,7 +517,7 @@ def jpegenc(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
 
     # DCT on input image X.
     if log:
-        print('Forward {} x {} DCT'.format(N, N))
+        print('Forward {} x {} LBT'.format(N, N))
     C8 = dct_ii(N)
     Y = colxfm(colxfm(X, C8).T, C8).T
 
@@ -606,7 +606,7 @@ def jpegenc(X: np.ndarray, qstep: float, N: int = 8, M: int = 8,
     return vlc, dhufftab
 
 
-def jpegdec(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
+def jpegdec_lbt(vlc: np.ndarray, qstep: float, N: int = 8, M: int = 8,
         hufftab: Optional[HuffmanTable] = None,
         dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
         ) -> np.ndarray:
