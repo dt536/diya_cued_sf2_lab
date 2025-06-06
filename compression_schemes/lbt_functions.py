@@ -255,7 +255,7 @@ def CPR_LBT_suppressed(X, N, s, rms_ref, step_ref, rise_ratio, keep_fraction):
     rms_ref = np.std(X - Xq)
     rms_supress = np.std(X-Zp)
     CPR = bits_ref / bits
-    return Δ_star, rms_opt, bits, CPR
+    return Δ_star, rms_opt, rms_supress, bits, CPR, Zp
 
 def inverse_LBT(Y, N, s):
     # ----- 1.  matrices -------------------------------------------------
@@ -272,7 +272,8 @@ def inverse_LBT(Y, N, s):
     Zp[t, :] = colxfm(Zp[t, :],  Pr.T)     # columns
 
     return Zp
-    return Δ_star, rms_opt, rms_supress, bits, CPR, Zp
+    
+#--------------------------------------not using -----------------------------------------------------
 
 
 def get_equivalent_lbt_error_quant(X, N, M):

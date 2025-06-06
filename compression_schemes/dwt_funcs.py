@@ -339,7 +339,7 @@ def step_from_target_bits_DWT(X: np.ndarray,
                               tol_bits: float = 500.0,
                               max_iter: int = 5000):
     """
-    Find the step size Δ such that the LBT bit-count ≈ target_bits.
+    Find the step size Δ such that the DWT bit-count ≈ target_bits.
 
     Parameters
     ----------
@@ -365,21 +365,19 @@ def step_from_target_bits_DWT(X: np.ndarray,
         bits = lbt_bits(Yq, N)
         return Yq, bits
 
-    Δ_low, Δ_high = lo, hi
-    Yq, bits = _quantise_and_bits(Δ_high)
-
+    vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
     # binary search for Δ so that bits ≈ target_bits
     for _ in range(max_iter):
-        step = 0.5 * (Δ_low + Δ_high)
-        Yq, bits = _quantise_and_bits(step)
+        step = 0.5 * (lo + hi)
+        vlc, dhufftab, totalbits = jpegenc_dwt(X, 5, dcbits=10, steps=scaled, rise_ratio=1.0, log=False, opthuff=True)
 
-        if abs(bits - target_bits) <= tol_bits:
+        if abs(totalbits - target_bits) <= tol_bits:
             break
 
         if bits > target_bits:     # too many bits ⇒ need larger Δ
-            Δ_low = step
+            lo = step
         else:                       # too few bits ⇒ need smaller Δ
-            Δ_high = step
+            hi = step
     else:
         print("Warning: max_iter reached without hitting target_bits")
 
