@@ -88,7 +88,7 @@ def optimisation_for_DWT(X, Y, n, target_rms, rise_ratio=0.5, max_iter: int = 10
     """
     ls, hs = 1.0, 50.0           # lower / upper bounds
     step_size   = hs
-    tol         = 0.001
+    tol         = 0.01
     dwtstep = np.full((3, n+1), hs)
     Yq, _ = quantdwt(Y, dwtstep, rise_ratio)
     Z = nlevidwt(Yq, n)
@@ -230,15 +230,14 @@ def diff_step_sizes(X, m, n, target_rms, rise_ratio=0.5):
     """
     This function scales dwtstep appropriately for an equal mse and equal rms scheme
     Input: X, m (eg 256), n
-    Output:scaled
+    Output: optimal starting step, scaled steps, Yq, dwtent, Z
     """
     Y = nlevdwt(X, n)
     energies = energy_from_impulse(m, n)
     step_ratios = 1 / np.sqrt(energies)
     step_ratios /= step_ratios[0][0]
-    print(step_ratios)
-    _, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio)
-    return(scaled, Yq, dwtent, Z)
+    opt_step, scaled, Yq, dwtent, Z = optimisation_for_DWT_MSE(X, Y, n, step_ratios, target_rms, rise_ratio)
+    return(opt_step, scaled, Yq, dwtent, Z)
     
 def quant1dwt(Y: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5):
     """
