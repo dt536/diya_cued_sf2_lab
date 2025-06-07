@@ -8,7 +8,7 @@ from cued_sf2_lab.laplacian_pyramid import quantise,bpp
 from cued_sf2_lab.dct import colxfm, regroup
 from cued_sf2_lab.lbt import pot_ii, dct_ii
 from compression_schemes.dct_funcs import dctbpp, generate_suppress_mask, suppress_dct_coefficients
-
+from compression_schemes.dct_funcs import regroup, dctbpp    
 
 
 
@@ -303,9 +303,7 @@ def get_equivalent_lbt_error_quant(X, N, M):
 
 # ---------------------------------------------------------------------
 #  NEW  ✦  Bit-count for LBT
-# ---------------------------------------------------------------------
-from dct_funcs import regroup, dctbpp              # already in your repo
-# (regroup(Yq,N)/N produces the 16×16 mosaic of sub-images that dctbpp expects)
+# ---------------------------------------------------------------------         
 
 def lbt_bits(Yq: np.ndarray, N: int) -> float:
     """
