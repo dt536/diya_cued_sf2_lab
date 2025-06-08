@@ -111,6 +111,24 @@ def generate_suppress_mask(N, keep_fraction):
     return mask
 
 
+def square_lowpass_mask(N, keep_fraction):
+    mask = np.zeros((N, N))
+    limit = int(N * keep_fraction)
+    mask[:limit, :limit] = 1
+    return mask
+
+def circular_lowpass_mask(N, keep_fraction):
+    mask = np.zeros((N, N))
+    center = (0, 0)  # top-left is DC
+    radius = int(N * keep_fraction)
+    for i in range(N):
+        for j in range(N):
+            if np.sqrt(i**2 + j**2) < radius:
+                mask[i, j] = 1
+    return mask
+
+
+
 
 def suppress_dct_coefficients(Y, suppress_mask):
     """
