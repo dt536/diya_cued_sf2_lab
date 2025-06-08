@@ -604,8 +604,9 @@ def jpegenc_dwt2(X: np.ndarray, n, step_multiplier, rise_ratio,
             # 2) amplitude bits (offset-binary)
             if sz > 0:
                 if diff < 0:
-                    diff -= (1 << sz) - 1
-                mag = diff & ((1 << sz) - 1)
+                    mag = diff + (1 << sz) - 1
+                else:
+                    mag = diff
                 vlc.append(np.array([[mag, sz]], dtype=int))
 
             # ──────────────────────────────────────────────────────
@@ -658,8 +659,10 @@ def jpegenc_dwt2(X: np.ndarray, n, step_multiplier, rise_ratio,
             # 2) amplitude bits
             if sz > 0:
                 if diff < 0:
-                    diff -= (1<<sz) - 1
-                vlc.append(np.array([[diff & ((1<<sz)-1), sz]]))
+                    mag = diff + (1 << sz) - 1
+                else:
+                    mag = diff
+                vlc.append(np.array([[mag, sz]], dtype=int))
 
 
             # Encode the other AC coefficients in scan order
