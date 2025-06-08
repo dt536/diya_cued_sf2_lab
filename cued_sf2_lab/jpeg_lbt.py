@@ -6,7 +6,7 @@ from typing import Tuple, NamedTuple, Optional
 
 import numpy as np
 from .laplacian_pyramid import quant1, quant2
-from .dct import dct_ii, colxfm, regroup
+from compression_schemes.dct_funcs import dct_ii, colxfm, regroup, square_lowpass_mask
 from .bitword import bitword
 from compression_schemes.lbt_functions import *
 
@@ -24,6 +24,37 @@ __all__ = [
     "jpegenc_lbt_with_suppression",
 ]
 
+jpeg_quant_table = np.array([
+    [16, 11, 10, 16, 24, 40, 51, 61],
+    [12, 12, 14, 19, 26, 58, 60, 55],
+    [14, 13, 16, 24, 40, 57, 69, 56],
+    [14, 17, 22, 29, 51, 87, 80, 62],
+    [18, 22, 37, 56, 68,109,103, 77],
+    [24, 35, 55, 64, 81,104,113, 92],
+    [49, 64, 78, 87,103,121,120,101],
+    [72, 92, 95, 98,112,100,103, 99]
+])
+
+# --- Vectorised Quantisation Functions
+
+def quant1_matrix(x, step, rise1=None):
+    if np.isscalar(step):
+        step = step * np.ones_like(x)
+    if rise1 is None:
+        rise = step / 2.0
+    else:
+        rise = rise1
+    temp = np.ceil((np.abs(x) - rise) / step)
+    q = temp * (temp > 0) * np.sign(x)
+    return q
+
+def quant2_matrix(q, step, rise1=None):
+    if np.isscalar(step):
+        step = step * np.ones_like(q)
+    if rise1 is None:
+        return q * step
+    else:
+        return q * step + np.sign(q) * (rise1 - step / 2.0)
 
 def diagscan(N: int) -> np.ndarray:
     '''
@@ -749,6 +780,310 @@ def vlctest(vlc: np.ndarray) -> int:
     bitword.verify(bitwords)
     return bitwords['bits'].sum(dtype=np.intp)
 
+def jpegenc_lbt_table(X: np.ndarray, qstep: float, rise_ratio=0.5, N: int = 8, M: int = 8,
+        opthuff: bool = False, dcbits: int = 8, log: bool = True
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    
+    '''
+    Encodes the image in X to generate a variable length bit stream.
+
+    Parameters:
+        X: the input greyscale image
+        qstep: the quantisation step to use in encoding
+        N: the width of the DCT block (defaults to 8)
+        M: the width of each block to be coded (defaults to N). Must be an
+            integer multiple of N - if it is larger, individual blocks are
+            regrouped.
+        opthuff: if true, the Huffman table is optimised based on the data in X
+        dcbits: the number of bits to use to encode the DC coefficients
+            of the DCT.
+
+    Returns:
+        vlc: variable length output codes, where ``vlc[:,0]`` are the codes and
+            ``vlc[:,1]`` the number of corresponding valid bits, so that
+            ``sum(vlc[:,1])`` gives the total number of bits in the image
+        hufftab: optional outputs containing the Huffman encoding
+            used in compression when `opthuff` is ``True``.
+            
+    '''
+    jpeg_quant_table = np.array([
+    [16, 11, 10, 16, 24, 40, 51, 61],
+    [12, 12, 14, 19, 26, 58, 60, 55],
+    [14, 13, 16, 24, 40, 57, 69, 56],
+    [14, 17, 22, 29, 51, 87, 80, 62],
+    [18, 22, 37, 56, 68,109,103, 77],
+    [24, 35, 55, 64, 81,104,113, 92],
+    [49, 64, 78, 87,103,121,120,101],
+    [72, 92, 95, 98,112,100,103, 99]
+    ])
+
+    fu_quant_table = np.array([
+    [3,  2,  2,  3,  5,  8, 10, 12],
+    [2,  2,  3,  4,  5, 12, 12, 11],
+    [3,  3,  3,  5,  8, 11, 14, 11],
+    [3,  3,  4,  6, 10, 17, 16, 12],
+    [4,  4,  7, 11, 14, 22, 21, 15],
+    [5,  7, 11, 13, 16, 21, 23, 18],
+    [10, 13, 16, 17, 21, 24, 24, 20],
+    [14, 18, 19, 20, 22, 20, 21, 20]
+    ])
+
+
+    if M % N != 0:
+        raise ValueError('M must be an integer multiple of N!')
+
+    # DCT on input image X.
+    if log:
+        print("Applying POT filter + DCT analysis")
+    Y = forward_LBT(X, N, np.sqrt(2))
+
+    # Quantise to integers.
+    if log:
+        print('Quantising to step size of {}'.format(qstep))
+    Q = np.tile(fu_quant_table, (N // 8, N // 8)) * qstep
+    Yq = np.zeros_like(Y, dtype=int)
+    H, W = Y.shape
+    for r in range(0, H, N):
+        for c in range(0, W, N):
+            Yq[r:r+N, c:c+N] = quant1_matrix(Y[r:r+N, c:c+N], Q, Q * rise_ratio).astype(int)
+
+    # Generate zig-zag scan of AC coefs.
+    scan = diagscan(M)
+
+    # On the first pass use default huffman tables.
+    if log:
+        print('Generating huffcode and ehuf using default tables')
+    dhufftab = huffdflt(1)  # Default tables.
+    huffcode, ehuf = huffgen(dhufftab)
+
+    # Generate run/ampl values and code them into vlc(:,1:2).
+    # Also generate a histogram of code symbols.
+    if log:
+        print('Coding rows')
+    sy = Yq.shape
+    huffhist = np.zeros(16 ** 2)
+    vlc = []
+    for r in range(0, sy[0], M):
+        for c in range(0, sy[1], M):
+            yq = Yq[r:r+M,c:c+M]
+            # Possibly regroup
+            if M > N:
+                yq = regroup(yq, N)
+            yqflat = yq.flatten('F')
+            # Encode DC coefficient first
+            dccoef = yqflat[0] + 2 ** (dcbits-1)
+            if dccoef not in range(2**dcbits):
+                raise ValueError(
+                    'DC coefficients too large for desired number of bits')
+            vlc.append(np.array([[dccoef, dcbits]]))
+            # Encode the other AC coefficients in scan order
+            # huffenc() also updates huffhist.
+            ra1 = runampl(yqflat[scan])
+            vlc.append(huffenc(huffhist, ra1, ehuf))
+    # (0, 2) array makes this work even if `vlc == []`
+    vlc = np.concatenate([np.zeros((0, 2), dtype=np.intp)] + vlc)
+
+    # Return here if the default tables are sufficient, otherwise repeat the
+    # encoding process using the custom designed huffman tables.
+    if not opthuff:
+        if log:
+            print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
+        totalbits = sum(vlc[:, 1])
+        return vlc, dhufftab, totalbits
+
+    # Design custom huffman tables.
+    if log:
+        print('Generating huffcode and ehuf using custom tables')
+    dhufftab = huffdes(huffhist)
+    huffcode, ehuf = huffgen(dhufftab)
+
+    # Generate run/ampl values and code them into vlc(:,1:2).
+    # Also generate a histogram of code symbols.
+    if log:
+        print('Coding rows (second pass)')
+    huffhist = np.zeros(16 ** 2)
+    vlc = []
+    for r in range(0, sy[0], M):
+        for c in range(0, sy[1], M):
+            yq = Yq[r:r+M, c:c+M]
+            # Possibly regroup
+            if M > N:
+                yq = regroup(yq, N)
+            yqflat = yq.flatten('F')
+            # Encode DC coefficient first
+            dccoef = yqflat[0] + 2 ** (dcbits-1)
+            vlc.append(np.array([[dccoef, dcbits]]))
+            # Encode the other AC coefficients in scan order
+            # huffenc() also updates huffhist.
+            ra1 = runampl(yqflat[scan])
+            vlc.append(huffenc(huffhist, ra1, ehuf))
+    # (0, 2) array makes this work even if `vlc == []`
+    vlc = np.concatenate([np.zeros((0, 2), dtype=np.intp)] + vlc)
+
+    if log:
+        print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
+        print('Bits for huffman table = {}'.format(
+            (16 + max(dhufftab.huffval.shape))*8))
+    totalbits = vlc[:,1].sum() + ((16 + max(dhufftab.huffval.shape))*8)
+    return vlc, dhufftab, totalbits
+
+def jpegdec_lbt_table(vlc: np.ndarray, qstep: float, rise_ratio, N: int = 8, M: int = 8,
+        hufftab: Optional[HuffmanTable] = None,
+        dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
+        ) -> np.ndarray:
+    '''
+    Decodes a (simplified) JPEG bit stream to an image
+
+    Parameters:
+
+        vlc: variable length output code from jpegenc
+        qstep: quantisation step to use in decoding
+        n:
+        rise_ratio 
+        N: width of the DCT block (defaults to 8)
+        M: width of each block to be coded (defaults to N). Must be an
+            integer multiple of N - if it is larger, individual blocks are
+            regrouped.
+        hufftab: if supplied, these will be used in Huffman decoding
+            of the data, otherwise default tables are used
+        dcbits: the number of bits to use to decode the DC coefficients
+            of the DCT
+        W, H: the size of the image (defaults to 256 x 256)
+
+    Returns:
+
+        Z: the output greyscale image
+    '''
+    jpeg_quant_table = np.array([
+    [16, 11, 10, 16, 24, 40, 51, 61],
+    [12, 12, 14, 19, 26, 58, 60, 55],
+    [14, 13, 16, 24, 40, 57, 69, 56],
+    [14, 17, 22, 29, 51, 87, 80, 62],
+    [18, 22, 37, 56, 68,109,103, 77],
+    [24, 35, 55, 64, 81,104,113, 92],
+    [49, 64, 78, 87,103,121,120,101],
+    [72, 92, 95, 98,112,100,103, 99]
+    ])
+    fu_quant_table = np.array([
+    [3,  2,  2,  3,  5,  8, 10, 12],
+    [2,  2,  3,  4,  5, 12, 12, 11],
+    [3,  3,  3,  5,  8, 11, 14, 11],
+    [3,  3,  4,  6, 10, 17, 16, 12],
+    [4,  4,  7, 11, 14, 22, 21, 15],
+    [5,  7, 11, 13, 16, 21, 23, 18],
+    [10, 13, 16, 17, 21, 24, 24, 20],
+    [14, 18, 19, 20, 22, 20, 21, 20]
+    ])
+    Q = np.tile(fu_quant_table, (N // 8, N // 8)) * qstep
+    opthuff = (hufftab is not None)
+    if M % N != 0:
+        raise ValueError('M must be an integer multiple of N!')
+
+    # Set up standard scan sequence
+    scan = diagscan(M)
+
+    if opthuff:
+        if len(hufftab.bits.shape) != 1:
+            raise ValueError('bits.shape must be (len(bits),)')
+        if log:
+            print('Generating huffcode and ehuf using custom tables')
+    else:
+        if log:
+            print('Generating huffcode and ehuf using default tables')
+        hufftab = huffdflt(1)
+    # Define starting addresses of each new code length in huffcode.
+    # 0-based indexing instead of 1
+    huffstart = np.cumsum(np.block([0, hufftab.bits[:15]]))
+    # Set up huffman coding arrays.
+    huffcode, ehuf = huffgen(hufftab)
+
+    # Define array of powers of 2 from 1 to 2^16.
+    k = 2 ** np.arange(17)
+
+    # For each block in the image:
+
+    # Decode the dc coef (a fixed-length word)
+    # Look for any 15/0 code words.
+    # Choose alternate code words to be decoded (excluding 15/0 ones).
+    # and mark these with vector t until the next 0/0 EOB code is found.
+    # Decode all the t huffman codes, and the t+1 amplitude codes.
+
+    eob = ehuf[0]
+    run16 = ehuf[15 * 16]
+    i = 0
+    Zq = np.zeros((H, W))
+
+    if log:
+        print('Decoding rows')
+    for r in range(0, H, M):
+        for c in range(0, W, M):
+            yq = np.zeros(M**2)
+
+            # Decode DC coef - assume no of bits is correctly given in vlc table.
+            cf = 0
+            if vlc[i, 1] != dcbits:
+                raise ValueError(
+                    'The bits for the DC coefficient does not agree with vlc table')
+            yq[cf] = vlc[i, 0] - 2 ** (dcbits-1)
+            i += 1
+
+            # Loop for each non-zero AC coef.
+            while np.any(vlc[i] != eob):
+                run = 0
+
+                # Decode any runs of 16 zeros first.
+                while np.all(vlc[i] == run16):
+                    run += 16
+                    i += 1
+
+                # Decode run and size (in bits) of AC coef.
+                start = huffstart[vlc[i, 1] - 1]
+                res = hufftab.huffval[start + vlc[i, 0] - huffcode[start]]
+                run += res // 16
+                cf += run + 1
+                si = res % 16
+                i += 1
+
+                # Decode amplitude of AC coef.
+                if vlc[i, 1] != si:
+                    raise ValueError(
+                        'Problem with decoding .. you might be using the wrong hufftab table')
+                ampl = vlc[i, 0]
+
+                # Adjust ampl for negative coef (i.e. MSB = 0).
+                thr = k[si - 1]
+                yq[scan[cf-1]] = ampl - (ampl < thr) * (2 * thr - 1)
+
+                i += 1
+
+            # End-of-block detected, save block.
+            i += 1
+
+            yq = yq.reshape((M, M)).T
+
+            # Possibly regroup yq
+            if M > N:
+                yq = regroup(yq, M//N)
+            Zq[r:r+M, c:c+M] = yq
+
+    if log:
+        print('Inverse quantising to step size of {}'.format(qstep))
+
+    # Q = jpeg_quant_table * qstep
+    Zi = np.zeros_like(Zq)
+    H, W = Zq.shape
+    for r in range(0, H, N):
+        for c in range(0, W, N):
+            block = Zq[r:r+N, c:c+N]
+            Zi[r:r+N, c:c+N] = quant2_matrix(block, Q, Q * rise_ratio)
+
+
+    if log:
+        print('Inverse {} x {} LBT\n'.format(N, N))
+    Z = inverse_LBT(Zi, N, s=np.sqrt(2))
+    return Z
+
+
 
 def jpegenc_lbt_with_suppression(X: np.ndarray, qstep: float, rise_ratio=0.5, N: int = 8, M: int = 8, keep_fraction = 1.0, 
         opthuff: bool = False, dcbits: int = 8, log: bool = True
@@ -784,7 +1119,11 @@ def jpegenc_lbt_with_suppression(X: np.ndarray, qstep: float, rise_ratio=0.5, N:
     Y = forward_LBT(X, N, np.sqrt(2))
 
     #supressing high frequency coefficients
-    mask = generate_suppress_mask(N, keep_fraction)
+    #square_lowpass_mask
+    #circular_lowpass_mask
+    #generate_suppress_mask
+
+    mask = circular_lowpass_mask(N, keep_fraction)
     Ys = suppress_lbt_coefficients(Y, mask, N)
     # Quantise to integers.
     if log:

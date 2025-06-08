@@ -7,7 +7,7 @@ from cued_sf2_lab.familiarisation import load_mat_img, plot_image
 from cued_sf2_lab.laplacian_pyramid import quantise,bpp
 from cued_sf2_lab.dct import colxfm, regroup
 from cued_sf2_lab.lbt import pot_ii, dct_ii
-from compression_schemes.dct_funcs import dctbpp, generate_suppress_mask, suppress_dct_coefficients
+from compression_schemes.dct_funcs import dctbpp, generate_suppress_mask, suppress_dct_coefficients, circular_lowpass_mask, square_lowpass_mask
 from compression_schemes.dct_funcs import regroup, dctbpp    
 
 
@@ -236,7 +236,7 @@ def CPR_LBT_suppressed(X, N, s, rms_ref, step_ref, rise_ratio, keep_fraction):
     Y = colxfm(colxfm(Xp.T, C).T, C)
 
     # Suppress high-freq coefficients
-    mask = generate_suppress_mask(N, keep_fraction)
+    mask = circular_lowpass_mask(N, keep_fraction)
     Y_suppressed = suppress_lbt_coefficients(Y, mask, N)
 
     # Quantise and regroup

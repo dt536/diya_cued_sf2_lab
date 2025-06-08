@@ -202,6 +202,38 @@ def quant1(x, step, rise1=None):
     q = temp*(temp > 0)*np.sign(x)
     return q
 
+def quant1_matrix(x, step, rise1=None):
+    """
+    Quantise matrix `x` using a step size matrix or scalar `step`.
+
+    If `step` is a matrix (e.g. JPEG quantisation table), it is applied elementwise.
+    """
+    if np.isscalar(step):
+        step = step * np.ones_like(x)
+
+    if rise1 is None:
+        rise = step / 2.0
+    else:
+        rise = rise1
+
+    temp = np.ceil((np.abs(x) - rise) / step)
+    q = temp * (temp > 0) * np.sign(x)
+    return q
+
+def quant2_matrix(q, step, rise1=None):
+    """
+    Reconstruct matrix from quantised values using `step`, which can be a matrix.
+
+    Works with JPEG quantisation tables.
+    """
+    if np.isscalar(step):
+        step = step * np.ones_like(q)
+
+    if rise1 is None:
+        return q * step
+    else:
+        return q * step + np.sign(q) * (rise1 - step / 2.0)
+
 
 def quant2(q, step, rise1=None):
     """
