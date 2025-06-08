@@ -8,7 +8,7 @@ __all__ = [
     'zero_mean', 'nlevdwt', 'nlevidwt', 'quantdwt', 'quant1dwt', 'quant2dwt',
     'optimisation_for_DWT', 'compression_ratio_for_DWT',
     'get_sub_img_regions', 'energy_from_impulse', 'get_step_ratios',
-    'optimisation_for_DWT_MSE', 'diff_step_sizes'
+    'optimisation_for_DWT_MSE', 'diff_step_sizes', "make_freq_weighted_step_ratios"
 ]
 
 def zero_mean(X):
@@ -341,4 +341,15 @@ def quant2dwt(Yq: np.ndarray, dwtstep: np.ndarray, rise_ratio=0.5) -> np.ndarray
 
     return Y
 
+
+def make_freq_weighted_step_ratios(n, k):
+    """
+    Generate step_ratios using step × k^n logic (no energy equalisation).
+    """
+    step_ratios = np.zeros((3, n+1))
+    for level in range(n):
+        decay = k ** level
+        step_ratios[:, level] = decay
+    step_ratios[:, -1] = k ** n  # For LL band
+    return step_ratios
 
