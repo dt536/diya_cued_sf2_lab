@@ -22,6 +22,8 @@ __all__ = [
     "jpegenc_dwt",
     "jpegdec_dwt",
     "vlctest",
+    "jpegenc_dwt_dc_coding",
+    "jpegdec_dwt_dc_coding",
 ]
 
 
@@ -747,3 +749,210 @@ def vlctest(vlc: np.ndarray) -> int:
     bitwords = unstructured_to_structured(vlc, dtype=bitword.dtype)
     bitword.verify(bitwords)
     return bitwords['bits'].sum(dtype=np.intp)
+
+
+
+def jpegenc_dwt_dc_coding(X: np.ndarray, n, step_multiplier, rise_ratio, 
+        opthuff: bool = False, dcbits: int = 8, log: bool = True
+        ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    '''
+    Encodes the image in X to generate a variable length bit stream.
+    '''
+    step_ratios = get_step_ratios(256, n)
+    steps = step_multiplier * step_ratios
+    M = 2**n
+    N = 2**n
+    if M % N != 0:
+        raise ValueError('M must be an integer multiple of N!')
+
+    # DWT and quantisation
+    if log:
+        print('Forward {} DWT'.format(n))
+    Y = nlevdwt(X, n)
+    Yq = quant1dwt(Y, steps, rise_ratio)
+
+    if log:
+        print('Regrouping into {} x {} blocks'.format(2**n, 2**n))
+    Yq = dwtgroup(Yq, n)
+    Yq = np.round(Yq).astype(int)
+
+    scan = diagscan(M)
+
+    if log:
+        print('Generating huffcode and ehuf using default tables')
+    dhufftab = huffdflt(1)
+    huffcode, ehuf = huffgen(dhufftab)
+
+    if log:
+        print('Coding rows')
+    sy = Yq.shape
+    huffhist = np.zeros(16 ** 2)
+    vlc = []
+    prev_dc = 0
+
+    for r in range(0, sy[0], M):
+        for c in range(0, sy[1], M):
+            yq = Yq[r:r+M, c:c+M]
+            if M > N:
+                yq = regroup(yq, N)
+            yqflat = yq.flatten('F')
+
+            # === DC DIFFERENTIAL CODING ===
+            dc_actual = yqflat[0]
+            dc_diff = dc_actual - prev_dc
+            prev_dc = dc_actual
+            ra_dc = runampl(np.array([dc_diff]))
+            huffsym = ra_dc[0, 0] * 16 + ra_dc[0, 1]
+            ampl = ra_dc[0, 2]
+            vlc.append(huffenc(huffhist, ra_dc[:1, :], ehuf))  # single-row input
+
+            # === AC Coefficients ===
+            ra1 = runampl(yqflat[scan])
+            vlc.append(huffenc(huffhist, ra1, ehuf))
+
+    vlc = np.concatenate([np.zeros((0, 2), dtype=np.intp)] + vlc)
+
+    if not opthuff:
+        if log:
+            print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
+        totalbits = vlc[:, 1].sum() + ((16 + max(dhufftab.huffval.shape)) * 8)
+        return vlc, dhufftab, totalbits
+
+    # === Second Pass: Custom Huffman Tables ===
+    if log:
+        print('Generating huffcode and ehuf using custom tables')
+    dhufftab = huffdes(huffhist)
+    huffcode, ehuf = huffgen(dhufftab)
+
+    if log:
+        print('Coding rows (second pass)')
+    huffhist = np.zeros(16 ** 2)
+    vlc = []
+    prev_dc = 0
+
+    for r in range(0, sy[0], M):
+        for c in range(0, sy[1], M):
+            yq = Yq[r:r+M, c:c+M]
+            if M > N:
+                yq = regroup(yq, N)
+            yqflat = yq.flatten('F')
+
+            # === DC DIFFERENTIAL CODING (second pass) ===
+            dc_actual = yqflat[0]
+            dc_diff = dc_actual - prev_dc
+            prev_dc = dc_actual
+            ra_dc = runampl(np.array([dc_diff]))
+            huffsym = ra_dc[0, 0] * 16 + ra_dc[0, 1]
+            ampl = ra_dc[0, 2]
+            vlc.append(huffenc(huffhist, ra_dc[:1, :], ehuf))
+
+            # === AC Coefficients ===
+            ra1 = runampl(yqflat[scan])
+            vlc.append(huffenc(huffhist, ra1, ehuf))
+
+    vlc = np.concatenate([np.zeros((0, 2), dtype=np.intp)] + vlc)
+
+    if log:
+        print('Bits for coded image = {}'.format(sum(vlc[:, 1])))
+        print('Bits for huffman table = {}'.format(
+            (16 + max(dhufftab.huffval.shape)) * 8))
+
+    totalbits = vlc[:, 1].sum() + ((16 + max(dhufftab.huffval.shape)) * 8)
+    return vlc, dhufftab, totalbits
+
+
+def jpegdec_dwt_dc_coding(vlc: np.ndarray, n, step_multiplier, rise_ratio, 
+        hufftab: Optional[HuffmanTable] = None,
+        dcbits: int = 8, W: int = 256, H: int = 256, log: bool = True
+        ) -> np.ndarray:
+
+    step_ratios = get_step_ratios(256, n)
+    steps = step_multiplier * step_ratios
+    N = 2**n
+    M = 2**n
+    opthuff = (hufftab is not None)
+    if M % N != 0:
+        raise ValueError('M must be an integer multiple of N!')
+
+    scan = diagscan(M)
+
+    if opthuff:
+        if len(hufftab.bits.shape) != 1:
+            raise ValueError('bits.shape must be (len(bits),)')
+        if log:
+            print('Generating huffcode and ehuf using custom tables')
+    else:
+        if log:
+            print('Generating huffcode and ehuf using default tables')
+        hufftab = huffdflt(1)
+
+    huffstart = np.cumsum(np.block([0, hufftab.bits[:15]]))
+    huffcode, ehuf = huffgen(hufftab)
+    k = 2 ** np.arange(17)
+
+    eob = ehuf[0]
+    run16 = ehuf[15 * 16]
+    i = 0
+    Zq = np.zeros((H, W))
+    prev_dc = 0  # initialize DC predictor
+
+    if log:
+        print('Decoding rows')
+    for r in range(0, H, M):
+        for c in range(0, W, M):
+            yq = np.zeros(M**2)
+            cf = 0
+
+            # === DIFFERENTIAL DC DECODING ===
+            start = huffstart[vlc[i, 1] - 1]
+            sym = hufftab.huffval[start + vlc[i, 0] - huffcode[start]]
+            run = sym // 16  # always 0 for DC
+            size = sym % 16
+            i += 1
+
+            if size == 0:
+                dc_diff = 0
+            else:
+                ampl = vlc[i, 0]
+                threshold = 1 << (size - 1)
+                dc_diff = ampl if ampl >= threshold else ampl - (2 * threshold - 1)
+                i += 1
+
+            dc_actual = prev_dc + dc_diff
+            prev_dc = dc_actual
+            yq[cf] = dc_actual
+
+            # === AC Coefficients ===
+            while np.any(vlc[i] != eob):
+                run = 0
+                while np.all(vlc[i] == run16):
+                    run += 16
+                    i += 1
+
+                start = huffstart[vlc[i, 1] - 1]
+                res = hufftab.huffval[start + vlc[i, 0] - huffcode[start]]
+                run += res // 16
+                cf += run + 1
+                si = res % 16
+                i += 1
+
+                if vlc[i, 1] != si:
+                    raise ValueError('Problem with decoding .. you might be using the wrong hufftab table')
+
+                ampl = vlc[i, 0]
+                thr = k[si - 1]
+                yq[scan[cf - 1]] = ampl - (ampl < thr) * (2 * thr - 1)
+                i += 1
+
+            i += 1  # Skip EOB
+            yq = yq.reshape((M, M)).T
+
+            if M > N:
+                yq = regroup(yq, M // N)
+            Zq[r:r+M, c:c+M] = yq
+
+    Z_reg = dwtgroup(Zq, -n)
+    Zq = quant2dwt(Z_reg, steps, rise_ratio)
+    Z = nlevidwt(Zq, n)
+
+    return Z
